@@ -66,7 +66,8 @@ export default {
       // ],
       // tell babel which type of files need be translate
       extensions: ['.js', '.ts', '.tsx'],
-      include: ['src/**']
+      include: ['src/**'],
+      runtimeHelpers: true
     })
   ]
 };
