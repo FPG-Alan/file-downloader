@@ -2,9 +2,6 @@
 // Project: Savvy-Transfer
 // Definitions by: Alan.Yang <http://fpg-alan.github.io>
 
-import filesystemIO from './methods/filesystem';
-import memoryIO from './methods/memory';
-
 export = SavvyTransfer;
 
 declare class SavvyTransfer {

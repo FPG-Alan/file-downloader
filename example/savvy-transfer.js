@@ -914,82 +914,481 @@
 
 	var inherits = _inherits;
 
-	var IO =
-	/*#__PURE__*/
-	function () {
-	  function IO() {
-	    classCallCheck(this, IO);
+	var IO = function IO() {
+	  classCallCheck(this, IO);
+	};
+
+	var extmime = {
+	  '3ds': 'image/x-3ds',
+	  '3g2': 'video/3gpp2',
+	  '3gp': 'video/3gpp',
+	  '7z': 'application/x-7z-compressed',
+	  aac: 'audio/x-aac',
+	  abw: 'application/x-abiword',
+	  ace: 'application/x-ace-compressed',
+	  adp: 'audio/adpcm',
+	  aif: 'audio/x-aiff',
+	  aifc: 'audio/x-aiff',
+	  aiff: 'audio/x-aiff',
+	  apk: 'application/vnd.android.package-archive',
+	  asf: 'video/x-ms-asf',
+	  asx: 'video/x-ms-asf',
+	  atom: 'application/atom+xml',
+	  au: 'audio/basic',
+	  avi: 'video/x-msvideo',
+	  bat: 'application/x-msdownload',
+	  bmp: 'image/bmp',
+	  btif: 'image/prs.btif',
+	  bz: 'application/x-bzip',
+	  bz2: 'application/x-bzip2',
+	  caf: 'audio/x-caf',
+	  cgm: 'image/cgm',
+	  cmx: 'image/x-cmx',
+	  com: 'application/x-msdownload',
+	  conf: 'text/plain',
+	  css: 'text/css',
+	  csv: 'text/csv',
+	  dbk: 'application/docbook+xml',
+	  deb: 'application/x-debian-package',
+	  def: 'text/plain',
+	  djv: 'image/vnd.djvu',
+	  djvu: 'image/vnd.djvu',
+	  dll: 'application/x-msdownload',
+	  dmg: 'application/x-apple-diskimage',
+	  doc: 'application/msword',
+	  docm: 'application/vnd.ms-word.document.macroenabled.12',
+	  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	  dot: 'application/msword',
+	  dotm: 'application/vnd.ms-word.template.macroenabled.12',
+	  dotx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+	  dra: 'audio/vnd.dra',
+	  dtd: 'application/xml-dtd',
+	  dts: 'audio/vnd.dts',
+	  dtshd: 'audio/vnd.dts.hd',
+	  dvb: 'video/vnd.dvb.file',
+	  dwg: 'image/vnd.dwg',
+	  dxf: 'image/vnd.dxf',
+	  ecelp4800: 'audio/vnd.nuera.ecelp4800',
+	  ecelp7470: 'audio/vnd.nuera.ecelp7470',
+	  ecelp9600: 'audio/vnd.nuera.ecelp9600',
+	  emf: 'application/x-msmetafile',
+	  emz: 'application/x-msmetafile',
+	  eol: 'audio/vnd.digital-winds',
+	  epub: 'application/epub+zip',
+	  exe: 'application/x-msdownload',
+	  f4v: 'video/x-f4v',
+	  fbs: 'image/vnd.fastbidsheet',
+	  fh: 'image/x-freehand',
+	  fh4: 'image/x-freehand',
+	  fh5: 'image/x-freehand',
+	  fh7: 'image/x-freehand',
+	  fhc: 'image/x-freehand',
+	  flac: 'audio/x-flac',
+	  fli: 'video/x-fli',
+	  flv: 'video/x-flv',
+	  fpx: 'image/vnd.fpx',
+	  fst: 'image/vnd.fst',
+	  fvt: 'video/vnd.fvt',
+	  g3: 'image/g3fax',
+	  gif: 'image/gif',
+	  h261: 'video/h261',
+	  h263: 'video/h263',
+	  h264: 'video/h264',
+	  heif: 'image/heif',
+	  heic: 'image/heic',
+	  htm: 'text/html',
+	  html: 'text/html',
+	  ico: 'image/x-icon',
+	  ief: 'image/ief',
+	  iso: 'application/x-iso9660-image',
+	  jpe: 'image/jpeg',
+	  jpeg: 'image/jpeg',
+	  jpg: 'image/jpeg',
+	  jpgm: 'video/jpm',
+	  jpgv: 'video/jpeg',
+	  jpm: 'video/jpm',
+	  json: 'application/json',
+	  jsonml: 'application/jsonml+json',
+	  kar: 'audio/midi',
+	  ktx: 'image/ktx',
+	  list: 'text/plain',
+	  log: 'text/plain',
+	  lvp: 'audio/vnd.lucent.voice',
+	  m13: 'application/x-msmediaview',
+	  m14: 'application/x-msmediaview',
+	  m1v: 'video/mpeg',
+	  m21: 'application/mp21',
+	  m2a: 'audio/mpeg',
+	  m2v: 'video/mpeg',
+	  m3a: 'audio/mpeg',
+	  m3u: 'audio/x-mpegurl',
+	  m3u8: 'application/vnd.apple.mpegurl',
+	  m4a: 'audio/mp4',
+	  m4u: 'video/vnd.mpegurl',
+	  m4v: 'video/x-m4v',
+	  mdi: 'image/vnd.ms-modi',
+	  mid: 'audio/midi',
+	  midi: 'audio/midi',
+	  mj2: 'video/mj2',
+	  mjp2: 'video/mj2',
+	  mk3d: 'video/x-matroska',
+	  mka: 'audio/x-matroska',
+	  mks: 'video/x-matroska',
+	  mkv: 'video/x-matroska',
+	  mmr: 'image/vnd.fujixerox.edmics-mmr',
+	  mng: 'video/x-mng',
+	  mov: 'video/quicktime',
+	  movie: 'video/x-sgi-movie',
+	  mp2: 'audio/mpeg',
+	  mp21: 'application/mp21',
+	  mp2a: 'audio/mpeg',
+	  mp3: 'audio/mpeg',
+	  mp4: 'video/mp4',
+	  mp4a: 'audio/mp4',
+	  mp4s: 'application/mp4',
+	  mp4v: 'video/mp4',
+	  mpe: 'video/mpeg',
+	  mpeg: 'video/mpeg',
+	  mpg: 'video/mpeg',
+	  mpg4: 'video/mp4',
+	  mpga: 'audio/mpeg',
+	  mpkg: 'application/vnd.apple.installer+xml',
+	  msi: 'application/x-msdownload',
+	  mvb: 'application/x-msmediaview',
+	  mxf: 'application/mxf',
+	  mxml: 'application/xv+xml',
+	  mxu: 'video/vnd.mpegurl',
+	  npx: 'image/vnd.net-fpx',
+	  odb: 'application/vnd.oasis.opendocument.database',
+	  odc: 'application/vnd.oasis.opendocument.chart',
+	  odf: 'application/vnd.oasis.opendocument.formula',
+	  odft: 'application/vnd.oasis.opendocument.formula-template',
+	  odg: 'application/vnd.oasis.opendocument.graphics',
+	  odi: 'application/vnd.oasis.opendocument.image',
+	  odm: 'application/vnd.oasis.opendocument.text-master',
+	  odp: 'application/vnd.oasis.opendocument.presentation',
+	  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+	  odt: 'application/vnd.oasis.opendocument.text',
+	  oga: 'audio/ogg',
+	  ogg: 'audio/ogg',
+	  ogv: 'video/ogg',
+	  ogx: 'application/ogg',
+	  otc: 'application/vnd.oasis.opendocument.chart-template',
+	  otg: 'application/vnd.oasis.opendocument.graphics-template',
+	  oth: 'application/vnd.oasis.opendocument.text-web',
+	  oti: 'application/vnd.oasis.opendocument.image-template',
+	  otp: 'application/vnd.oasis.opendocument.presentation-template',
+	  ots: 'application/vnd.oasis.opendocument.spreadsheet-template',
+	  ott: 'application/vnd.oasis.opendocument.text-template',
+	  oxt: 'application/vnd.openofficeorg.extension',
+	  pbm: 'image/x-portable-bitmap',
+	  pct: 'image/x-pict',
+	  pcx: 'image/x-pcx',
+	  pdf: 'application/pdf',
+	  pgm: 'image/x-portable-graymap',
+	  pic: 'image/x-pict',
+	  plb: 'application/vnd.3gpp.pic-bw-large',
+	  png: 'image/png',
+	  pnm: 'image/x-portable-anymap',
+	  pot: 'application/vnd.ms-powerpoint',
+	  potx: 'application/vnd.openxmlformats-officedocument.presentationml.template',
+	  ppm: 'image/x-portable-pixmap',
+	  pps: 'application/vnd.ms-powerpoint',
+	  ppsx: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+	  ppt: 'application/vnd.ms-powerpoint',
+	  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+	  psb: 'application/vnd.3gpp.pic-bw-small',
+	  psd: 'image/vnd.adobe.photoshop',
+	  pvb: 'application/vnd.3gpp.pic-bw-var',
+	  pya: 'audio/vnd.ms-playready.media.pya',
+	  pyv: 'video/vnd.ms-playready.media.pyv',
+	  qt: 'video/quicktime',
+	  ra: 'audio/x-pn-realaudio',
+	  ram: 'audio/x-pn-realaudio',
+	  ras: 'image/x-cmu-raster',
+	  rgb: 'image/x-rgb',
+	  rip: 'audio/vnd.rip',
+	  rlc: 'image/vnd.fujixerox.edmics-rlc',
+	  rmi: 'audio/midi',
+	  rmp: 'audio/x-pn-realaudio-plugin',
+	  s3m: 'audio/s3m',
+	  sgi: 'image/sgi',
+	  sgm: 'text/sgml',
+	  sgml: 'text/sgml',
+	  sid: 'image/x-mrsid-image',
+	  sil: 'audio/silk',
+	  sldx: 'application/vnd.openxmlformats-officedocument.presentationml.slide',
+	  smv: 'video/x-smv',
+	  snd: 'audio/basic',
+	  spx: 'audio/ogg',
+	  srt: 'application/x-subrip',
+	  sub: 'text/vnd.dvb.subtitle',
+	  svg: 'image/svg+xml',
+	  svgz: 'image/svg+xml',
+	  swf: 'application/x-shockwave-flash',
+	  tcap: 'application/vnd.3gpp2.tcap',
+	  text: 'text/plain',
+	  tga: 'image/x-tga',
+	  tif: 'image/tiff',
+	  tiff: 'image/tiff',
+	  torrent: 'application/x-bittorrent',
+	  tsv: 'text/tab-separated-values',
+	  ttl: 'text/turtle',
+	  txt: 'text/plain',
+	  udeb: 'application/x-debian-package',
+	  uva: 'audio/vnd.dece.audio',
+	  uvg: 'image/vnd.dece.graphic',
+	  uvh: 'video/vnd.dece.hd',
+	  uvi: 'image/vnd.dece.graphic',
+	  uvm: 'video/vnd.dece.mobile',
+	  uvp: 'video/vnd.dece.pd',
+	  uvs: 'video/vnd.dece.sd',
+	  uvu: 'video/vnd.uvvu.mp4',
+	  uvv: 'video/vnd.dece.video',
+	  uvva: 'audio/vnd.dece.audio',
+	  uvvg: 'image/vnd.dece.graphic',
+	  uvvh: 'video/vnd.dece.hd',
+	  uvvi: 'image/vnd.dece.graphic',
+	  uvvm: 'video/vnd.dece.mobile',
+	  uvvp: 'video/vnd.dece.pd',
+	  uvvs: 'video/vnd.dece.sd',
+	  uvvu: 'video/vnd.uvvu.mp4',
+	  uvvv: 'video/vnd.dece.video',
+	  viv: 'video/vnd.vivo',
+	  vob: 'video/x-ms-vob',
+	  wav: 'audio/x-wav',
+	  wax: 'audio/x-ms-wax',
+	  wbmp: 'image/vnd.wap.wbmp',
+	  wdp: 'image/vnd.ms-photo',
+	  weba: 'audio/webm',
+	  webm: 'video/webm',
+	  webp: 'image/webp',
+	  wm: 'video/x-ms-wm',
+	  wma: 'audio/x-ms-wma',
+	  wmf: 'application/x-msmetafile',
+	  wmv: 'video/x-ms-wmv',
+	  wmx: 'video/x-ms-wmx',
+	  wvx: 'video/x-ms-wvx',
+	  xap: 'application/x-silverlight-app',
+	  xbm: 'image/x-xbitmap',
+	  xht: 'application/xhtml+xml',
+	  xhtml: 'application/xhtml+xml',
+	  xhvml: 'application/xv+xml',
+	  xif: 'image/vnd.xiff',
+	  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	  xltx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+	  xm: 'audio/xm',
+	  xml: 'application/xml',
+	  xop: 'application/xop+xml',
+	  xpl: 'application/xproc+xml',
+	  xpm: 'image/x-xpixmap',
+	  xsl: 'application/xml',
+	  xslt: 'application/xslt+xml',
+	  xspf: 'application/xspf+xml',
+	  xvm: 'application/xv+xml',
+	  xvml: 'application/xv+xml',
+	  xwd: 'image/x-xwindowdump',
+	  zip: 'application/zip'
+	};
+	function filemime(name) {
+	  var fext = fileext(name);
+	  return extmime[fext] || 'application/octet-stream';
+	}
+	function fileext(name) {
+	  var uppercase = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+	  var iknowwhatimdoing = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+	  name = String(name || '');
+
+	  if (!name) {
+	    name = 'unknown';
 	  }
 
-	  createClass(IO, [{
-	    key: "download",
-	    value: function download() {}
-	  }]);
+	  var ext = name.substr(name.lastIndexOf('.') + 1);
 
-	  return IO;
-	}();
+	  if (ext === name) {
+	    ext = '';
+	  } else if (!iknowwhatimdoing) {
+	    ext = ext.replace(/<[^>]*>/g, '').replace(/[^\w+]/g, '');
 
-	var filesystemIO =
+	    if (ext.length > 9) {
+	      ext = ext.substr(0, 9);
+	    }
+	  }
+
+	  return uppercase ? ext.toUpperCase() : ext.toLowerCase();
+	}
+
+	var customWindow = window;
+	var TEMPORARY = 0;
+
+	var FilesystemIO =
 	/*#__PURE__*/
 	function (_IO) {
-	  inherits(filesystemIO, _IO);
+	  inherits(FilesystemIO, _IO);
 
-	  function filesystemIO() {
-	    classCallCheck(this, filesystemIO);
+	  function FilesystemIO(fileSize, name, fd_cb) {
+	    var _this;
 
-	    return possibleConstructorReturn(this, getPrototypeOf(filesystemIO).call(this));
+	    classCallCheck(this, FilesystemIO);
+
+	    _this = possibleConstructorReturn(this, getPrototypeOf(FilesystemIO).call(this));
+	    _this.size = void 0;
+	    _this.downloadSize = 0;
+	    _this.fileName = void 0;
+	    _this.fileWriter = null;
+	    _this.fileEntry = null;
+	    _this.bufferCache = [];
+	    _this.fullyDownloadCallback = void 0;
+	    _this.writing = false;
+
+	    _this.handleFileSystemRequestSuccess = function (fs) {
+	      fs.root.getDirectory('savvy', {
+	        create: true
+	      }, function (directoryEntry) {
+	        var dirReader = directoryEntry.createReader();
+	        dirReader.readEntries(function (entries) {
+	          console.log(entries); // 在这里执行一些清除任务.
+	        });
+	        fs.root.getFile('savvy/' + _this.fileName, {
+	          create: true
+	        }, function (fileEntry) {
+	          _this.fileEntry = fileEntry;
+	          fileEntry.createWriter(function (fw) {
+	            _this.fileWriter = fw;
+	            _this.fileWriter.onwritestart = _this.handleFileWriteStart;
+	            _this.fileWriter.onprogress = _this.handleFileWriteProgress;
+	            _this.fileWriter.onerror = _this.handleFileWriteError;
+	            _this.fileWriter.onwriteend = _this.handleFileWriteEnd;
+
+	            if (_this.bufferCache.length > 0) {
+	              _this.write(_this.bufferCache.shift());
+	            }
+	          });
+	        });
+	      });
+	    };
+
+	    _this.handleFileWriteStart = function (event) {
+	      console.log(event);
+	      _this.writing = true;
+	    };
+
+	    _this.handleFileWriteProgress = function (event) {
+	      console.log(event);
+	    };
+
+	    _this.handleFileWriteError = function (event) {
+	      console.log(event);
+	      _this.writing = false;
+	    };
+
+	    _this.handleFileWriteEnd = function (event) {
+	      console.log(event);
+	      console.log(_this.fileWriter.position);
+	      _this.writing = false;
+	      console.log(_this.bufferCache);
+
+	      if (_this.bufferCache.length > 0) {
+	        _this.write(_this.bufferCache.shift());
+	      }
+
+	      if (_this.fileWriter.position === _this.size) {
+	        if (_this.fullyDownloadCallback) {
+	          _this.fullyDownloadCallback();
+	        }
+
+	        _this.download('');
+	      }
+	    };
+
+	    _this.saveLink = function (err, objectURL) {
+	      var link = typeof objectURL === 'string' && objectURL;
+	      var dlLinkNode = document.createElement('a');
+	      dlLinkNode.download = _this.fileName;
+	      dlLinkNode.href = link || _this.fileEntry.toURL();
+	      dlLinkNode.click();
+	    };
+
+	    _this.saveFile = function (file) {
+	      try {
+	        var _file = new File([file], _this.fileName, {
+	          type: filemime(_this.fileName)
+	        });
+
+	        _this.saveLink(undefined, window.URL.createObjectURL(_file));
+	      } catch (ex) {
+	        console.log(ex);
+
+	        _this.saveLink();
+	      }
+	    };
+
+	    _this.size = fileSize;
+	    _this.fileName = name;
+	    _this.fullyDownloadCallback = fd_cb;
+	    customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem; // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
+	    // window.requestFileSystem(type, size, successCallback[, errorCallback]);
+
+	    customWindow.requestFileSystem(TEMPORARY, fileSize, _this.handleFileSystemRequestSuccess);
+	    return _this;
 	  }
 
-	  createClass(filesystemIO, [{
+	  createClass(FilesystemIO, [{
+	    key: "free_space",
+	    // Try to free space before starting the download.
+	    // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
+	    value: function free_space(callback, ms, delta) {}
+	  }, {
 	    key: "write",
-	    value: function write(buffer) {}
+	    value: function write(buffer) {
+	      console.log('filesystem write');
+
+	      if (this.fileWriter && !this.writing) {
+	        try {
+	          this.fileWriter.write(new Blob([buffer]));
+	        } catch (e) {
+	          console.log(e);
+	        }
+	      } else {
+	        this.bufferCache.push(buffer);
+	      }
+	    }
 	  }, {
 	    key: "download",
-	    value: function download() {
-	      console.log('fs download'); // 请求文件系统
-	      // 写入文件系统
-	      // 读取数据, 制造下载连接, 下载.
+	    value: function download(name) {
+	      console.log('filesystem download');
+
+	      if (typeof this.fileEntry.file === 'function') {
+	        try {
+	          this.fileEntry.file(this.saveFile, this.saveLink);
+	        } catch (e) {
+	          console.log(e);
+	        }
+	      } else {
+	        this.saveLink();
+	      }
 	    }
 	  }]);
 
-	  return filesystemIO;
-	}(IO);
-
-	var memoryIO =
-	/*#__PURE__*/
-	function (_IO) {
-	  inherits(memoryIO, _IO);
-
-	  function memoryIO() {
-	    classCallCheck(this, memoryIO);
-
-	    return possibleConstructorReturn(this, getPrototypeOf(memoryIO).call(this));
-	  }
-
-	  createClass(memoryIO, [{
-	    key: "write",
-	    value: function write() {
-	      console.log('memory write');
-	    }
-	  }]);
-
-	  return memoryIO;
+	  return FilesystemIO;
 	}(IO);
 
 	var SavvyFile =
 	/*#__PURE__*/
 	function () {
-	  function SavvyFile(path, fileSize, chunkSize, IOMethod) {
+	  function SavvyFile(path, name, fileSize, chunkSize, IOMethod) {
 	    classCallCheck(this, SavvyFile);
 
 	    this.chunklist = [];
 	    this.status = void 0;
 	    this.filePath = void 0;
+	    this.name = void 0;
 	    this.nowChunkIndex = 0;
 	    this.IO = void 0;
 	    this.status = 'initializing';
 	    this.filePath = path;
-	    this.IO = IOMethod;
+	    this.name = name;
+	    this.IO = new IOMethod(fileSize, name, this.fullyDownloadCallback);
 	    var tmpStart = 0,
 	        tmpEnd = 0;
 
@@ -1003,7 +1402,7 @@
 	      tmpStart = tmpEnd + 1;
 	    }
 
-	    this.status = 'ready';
+	    this.status = 'inited';
 	  }
 
 	  createClass(SavvyFile, [{
@@ -1014,12 +1413,56 @@
 	        this.status = 'chunk_empty';
 	      }
 
+	      console.log(this.chunklist, this.nowChunkIndex);
 	      return this.chunklist[this.nowChunkIndex++];
 	    }
 	  }, {
 	    key: "write",
-	    value: function write(response) {
-	      this.IO.write();
+	    value: function () {
+	      var _write = asyncToGenerator(
+	      /*#__PURE__*/
+	      regenerator.mark(function _callee(response) {
+	        var buffer, fullyDownload;
+	        return regenerator.wrap(function _callee$(_context) {
+	          while (1) {
+	            switch (_context.prev = _context.next) {
+	              case 0:
+	                _context.next = 2;
+	                return response.arrayBuffer();
+
+	              case 2:
+	                buffer = _context.sent;
+	                fullyDownload = this.IO.write(buffer);
+
+	                if (fullyDownload) {
+	                  this.status = 'chunk_empty';
+	                }
+
+	              case 5:
+	              case "end":
+	                return _context.stop();
+	            }
+	          }
+	        }, _callee, this);
+	      }));
+
+	      function write(_x) {
+	        return _write.apply(this, arguments);
+	      }
+
+	      return write;
+	    }()
+	  }, {
+	    key: "fullyDownloadCallback",
+	    value: function fullyDownloadCallback() {
+	      this.status = 'chunk_empty';
+	    }
+	  }, {
+	    key: "download",
+	    value: function download() {
+	      this.status = 'downloading';
+	      this.IO.download(this.name);
+	      this.status = 'complete';
 	    }
 	  }]);
 
@@ -1034,27 +1477,30 @@
 	  function SavvyTransfer() {
 	    classCallCheck(this, SavvyTransfer);
 
-	    this.IOMethod = null;
+	    this.IOMethod = void 0;
 	    this.size = 0;
 	    this.files = [];
-	    this.setIOMethod();
+	    // this.setIOMethod();
+	    // this.IOMethod = MemoryIO;
+	    this.IOMethod = FilesystemIO;
 	  }
 
 	  createClass(SavvyTransfer, [{
 	    key: "setIOMethod",
 	    value: function setIOMethod() {
-	      if (window.requestFileSystem || window.webkitRequestFileSystem) {
+	      /* if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
 	        this.IOMethod = new filesystemIO();
 	      } else {
 	        this.IOMethod = new memoryIO();
-	      }
+	      } */
+	      // this.IOMethod = MemoryIO;
 	    }
 	  }, {
 	    key: "addFile",
 	    value: function () {
 	      var _addFile = asyncToGenerator(
 	      /*#__PURE__*/
-	      regenerator.mark(function _callee(path) {
+	      regenerator.mark(function _callee(path, name) {
 	        var response, fileSize, tmpFile;
 	        return regenerator.wrap(function _callee$(_context) {
 	          while (1) {
@@ -1093,23 +1539,18 @@
 	              case 10:
 	                // calculate whether the size limit is exceeded
 	                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
-
-	                if (!(fileSize > SavvyTransfer.SIZE_LIMIT || fileSize + this.size > SavvyTransfer.SIZE_LIMIT)) {
-	                  _context.next = 14;
-	                  break;
-	                }
-
-	                console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
-	                return _context.abrupt("return");
-
-	              case 14:
+	                /*if (fileSize > SavvyTransfer.SIZE_LIMIT || fileSize + this.size > SavvyTransfer.SIZE_LIMIT) {
+	                  console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
+	                   return;
+	                } */
 	                // create new file
-	                tmpFile = new SavvyFile(path, fileSize, SavvyTransfer.CHUNK_SIZE);
+
+	                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IOMethod);
 	                this.files.push(tmpFile);
 	                this.ScheduleDownload();
 	                return _context.abrupt("return", tmpFile);
 
-	              case 18:
+	              case 15:
 	              case "end":
 	                return _context.stop();
 	            }
@@ -1117,7 +1558,7 @@
 	        }, _callee, this);
 	      }));
 
-	      function addFile(_x) {
+	      function addFile(_x, _x2) {
 	        return _addFile.apply(this, arguments);
 	      }
 
@@ -1126,20 +1567,22 @@
 	  }, {
 	    key: "ScheduleDownload",
 	    value: function ScheduleDownload() {
+	      console.log('ScheduleDownload', this.files);
+
 	      if (this.files.length > 0) {
 	        var nextFile = this.files.find(function (file) {
-	          return file.status === 'ready';
+	          return file.status === 'inited';
 	        });
 
 	        if (nextFile) {
-	          this.download(nextFile);
+	          this.fetchData(nextFile);
 	        }
 	      }
 	    }
 	  }, {
-	    key: "download",
+	    key: "fetchData",
 	    value: function () {
-	      var _download = asyncToGenerator(
+	      var _fetchData = asyncToGenerator(
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee2(file) {
 	        var nextChunk, response;
@@ -1147,10 +1590,16 @@
 	          while (1) {
 	            switch (_context2.prev = _context2.next) {
 	              case 0:
-	                console.log(file);
+	                console.log('fetchData');
 	                nextChunk = file.nextChunk();
+
+	                if (!nextChunk) {
+	                  _context2.next = 9;
+	                  break;
+	                }
+
 	                console.log('downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
-	                _context2.next = 5;
+	                _context2.next = 6;
 	                return fetch(file.filePath, {
 	                  method: 'GET',
 	                  headers: {
@@ -1158,13 +1607,16 @@
 	                  }
 	                });
 
-	              case 5:
+	              case 6:
 	                response = _context2.sent;
-	                file.write(response);
+	                _context2.next = 9;
+	                return file.write(response);
+
+	              case 9:
 	                this.ScheduleDownload();
 	                return _context2.abrupt("return");
 
-	              case 9:
+	              case 11:
 	              case "end":
 	                return _context2.stop();
 	            }
@@ -1172,12 +1624,19 @@
 	        }, _callee2, this);
 	      }));
 
-	      function download(_x2) {
-	        return _download.apply(this, arguments);
+	      function fetchData(_x3) {
+	        return _fetchData.apply(this, arguments);
 	      }
 
-	      return download;
+	      return fetchData;
 	    }()
+	  }, {
+	    key: "downloadFile",
+	    value: function downloadFile(files) {
+	      for (var i = 0, l = files.length; i < l; i++) {
+	        files[i].download();
+	      }
+	    }
 	  }, {
 	    key: "upload",
 	    value: function upload(name) {

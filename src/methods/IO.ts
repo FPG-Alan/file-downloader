@@ -1,3 +1,3 @@
 export default class IO {
-  public download() {}
+  // public download() {}
 }

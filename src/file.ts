@@ -1,19 +1,27 @@
 import { TChunk, TStatus } from './interface';
-import filesystemIO from './methods/filesystem';
-import memoryIO from './methods/memory';
+import FilesystemIO from './methods/filesystem';
+import MemoryIO from './methods/memory';
 
 export default class SavvyFile {
   public chunklist: TChunk[] = [];
   public status: TStatus;
   public filePath: string;
+  public name: string;
 
   private nowChunkIndex: number = 0;
-  private IO: filesystemIO | memoryIO;
+  private IO: FilesystemIO | MemoryIO;
 
-  constructor(path: string, fileSize: number, chunkSize: number, IOMethod: filesystemIO | memoryIO) {
+  constructor(
+    path: string,
+    name: string,
+    fileSize: number,
+    chunkSize: number,
+    IOMethod: (new (fileSize: number) => MemoryIO) | (new (fileSize: number, name: string, fd_cb: Function) => FilesystemIO)
+  ) {
     this.status = 'initializing';
     this.filePath = path;
-    this.IO = IOMethod;
+    this.name = name;
+    this.IO = new IOMethod(fileSize, name, this.fullyDownloadCallback);
 
     let tmpStart: number = 0,
       tmpEnd: number = 0;
@@ -28,7 +36,7 @@ export default class SavvyFile {
       tmpStart = tmpEnd + 1;
     }
 
-    this.status = 'ready';
+    this.status = 'inited';
   }
 
   public nextChunk(): TChunk {
@@ -36,9 +44,24 @@ export default class SavvyFile {
     if (!this.chunklist[this.nowChunkIndex + 1]) {
       this.status = 'chunk_empty';
     }
+    console.log(this.chunklist, this.nowChunkIndex);
     return this.chunklist[this.nowChunkIndex++];
   }
-  public write(response: Response): void {
-    this.IO.write();
+  public async write(response: Response): Promise<any> {
+    let buffer: ArrayBuffer = await response.arrayBuffer();
+    let fullyDownload: boolean = this.IO.write(buffer);
+
+    if (fullyDownload) {
+      this.status = 'chunk_empty';
+    }
+  }
+  private fullyDownloadCallback() {
+    this.status = 'chunk_empty';
+  }
+
+  public download(): void {
+    this.status = 'downloading';
+    this.IO.download(this.name);
+    this.status = 'complete';
   }
 }
