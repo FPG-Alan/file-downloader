@@ -12,46 +12,50 @@ export default class FilesystemIO extends IO {
 
   private fileWriter: FileWriter | null = null;
   private fileEntry: FileEntry | null = null;
-  private bufferCache: ArrayBuffer[] = [];
-
-  private fullyDownloadCallback: Function | null;
+  // private bufferCache: ArrayBuffer[] = [];
 
   private writing: boolean = false;
 
-  constructor(fileSize: number, name: string, fd_cb: Function) {
+  private writeEndResolve: Function | null = null;
+  private writeEndReject: Function | null = null;
+
+  constructor(fileSize: number, name: string, initedCallback: Function) {
     super();
     this.size = fileSize;
     this.fileName = name;
-    this.fullyDownloadCallback = fd_cb;
     customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem;
     // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
     // window.requestFileSystem(type, size, successCallback[, errorCallback]);
-    customWindow.requestFileSystem(TEMPORARY, fileSize, this.handleFileSystemRequestSuccess);
-  }
-  private handleFileSystemRequestSuccess = (fs: FileSystem): void => {
-    fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
-      let dirReader: DirectoryReader = directoryEntry.createReader();
+    customWindow.requestFileSystem(TEMPORARY, fileSize, (fs: FileSystem) => {
+      fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
+        let dirReader: DirectoryReader = directoryEntry.createReader();
 
-      dirReader.readEntries((entries: Entry[]) => {
-        console.log(entries);
-        // 在这里执行一些清除任务.
-      });
+        dirReader.readEntries((entries: Entry[]) => {
+          console.log(entries);
 
-      fs.root.getFile('savvy/' + this.fileName, { create: true }, (fileEntry: FileEntry) => {
-        this.fileEntry = fileEntry;
-        fileEntry.createWriter((fw: FileWriter) => {
-          this.fileWriter = fw;
-          this.fileWriter.onwritestart = this.handleFileWriteStart;
-          this.fileWriter.onprogress = this.handleFileWriteProgress;
-          this.fileWriter.onerror = this.handleFileWriteError;
-          this.fileWriter.onwriteend = this.handleFileWriteEnd;
-          if (this.bufferCache.length > 0) {
-            this.write(this.bufferCache.shift()!);
-          }
+          // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
+          /* entries.map((entry: Entry) => {
+            entry.remove(() => {
+              console.log('remove file [' + entry.name + '] from filesystem successful.');
+            });
+          }); */
+        });
+
+        fs.root.getFile('savvy/' + this.fileName, { create: true }, (fileEntry: FileEntry) => {
+          this.fileEntry = fileEntry;
+          fileEntry.createWriter((fw: FileWriter) => {
+            this.fileWriter = fw;
+            this.fileWriter.onwritestart = this.handleFileWriteStart;
+            this.fileWriter.onprogress = this.handleFileWriteProgress;
+            this.fileWriter.onerror = this.handleFileWriteError;
+            this.fileWriter.onwriteend = this.handleFileWriteEnd;
+
+            initedCallback && initedCallback();
+          });
         });
       });
     });
-  };
+  }
 
   private handleFileWriteStart = (event: ProgressEvent): void => {
     console.log(event);
@@ -71,32 +75,38 @@ export default class FilesystemIO extends IO {
     console.log(this.fileWriter!.position);
     this.writing = false;
 
-    console.log(this.bufferCache);
-    if (this.bufferCache.length > 0) {
-      this.write(this.bufferCache.shift()!);
-    }
+    if (this.writeEndResolve) {
+      this.writeEndResolve();
 
-    if (this.fileWriter!.position === this.size) {
-      if (this.fullyDownloadCallback) {
-        this.fullyDownloadCallback();
-      }
-
-      this.download('');
+      this.writeEndReject = null;
+      this.writeEndResolve = null;
     }
   };
   // Try to free space before starting the download.
   // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
   private free_space(callback: Function, ms: number, delta: any): void {}
-  public write(buffer: ArrayBuffer): void {
+  public write(buffer: ArrayBuffer): Promise<any> {
     console.log('filesystem write');
-    if (this.fileWriter && !this.writing) {
+    // has requested fs and get a file writer...
+    if (this.fileWriter) {
       try {
         this.fileWriter!.write(new Blob([buffer]));
+
+        return new Promise((resolve, reject) => {
+          this.writeEndResolve = resolve;
+          this.writeEndReject = reject;
+        });
       } catch (e) {
         console.log(e);
+
+        return new Promise((resolve, reject) => {
+          reject(e);
+        });
       }
     } else {
-      this.bufferCache.push(buffer);
+      return new Promise((resolve, reject) => {
+        reject('no file writer.');
+      });
     }
   }
 

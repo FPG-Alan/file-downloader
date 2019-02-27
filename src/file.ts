@@ -11,17 +11,10 @@ export default class SavvyFile {
   private nowChunkIndex: number = 0;
   private IO: FilesystemIO | MemoryIO;
 
-  constructor(
-    path: string,
-    name: string,
-    fileSize: number,
-    chunkSize: number,
-    IOMethod: (new (fileSize: number) => MemoryIO) | (new (fileSize: number, name: string, fd_cb: Function) => FilesystemIO)
-  ) {
+  constructor(path: string, name: string, fileSize: number, chunkSize: number, IOMethod: typeof FilesystemIO | typeof MemoryIO, initedCallback: Function) {
     this.status = 'initializing';
     this.filePath = path;
     this.name = name;
-    this.IO = new IOMethod(fileSize, name, this.fullyDownloadCallback);
 
     let tmpStart: number = 0,
       tmpEnd: number = 0;
@@ -37,6 +30,8 @@ export default class SavvyFile {
     }
 
     this.status = 'inited';
+
+    this.IO = new IOMethod(fileSize, name, initedCallback);
   }
 
   public nextChunk(): TChunk {
@@ -49,14 +44,9 @@ export default class SavvyFile {
   }
   public async write(response: Response): Promise<any> {
     let buffer: ArrayBuffer = await response.arrayBuffer();
-    let fullyDownload: boolean = this.IO.write(buffer);
-
-    if (fullyDownload) {
-      this.status = 'chunk_empty';
-    }
-  }
-  private fullyDownloadCallback() {
-    this.status = 'chunk_empty';
+    await this.IO.write(buffer);
+    console.log('file write complete');
+    return;
   }
 
   public download(): void {
