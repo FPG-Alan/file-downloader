@@ -1,6 +1,7 @@
 import IO from './IO';
 import { filemime } from '../utils/index';
 import SavvyFile from '../file';
+import SavvyZipFile from '../zip_file';
 
 const MSIE: boolean = typeof MSBlobBuilder === 'function';
 export default class MemoryIO extends IO {
@@ -20,7 +21,7 @@ export default class MemoryIO extends IO {
   public getFileWriter(): void {
     return;
   }
-  public write(file: SavvyFile, buffer: ArrayBuffer): boolean {
+  public write(file: SavvyFile | SavvyZipFile, buffer: ArrayBuffer): boolean {
     console.log('memory write');
     try {
       if (MSIE) {

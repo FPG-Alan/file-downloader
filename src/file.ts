@@ -3,6 +3,7 @@ import FilesystemIO from './methods/filesystem';
 import MemoryIO from './methods/memory';
 
 export default class SavvyFile {
+  public isZip: boolean = false;
   public chunklist: TChunk[] = [];
   public status: TStatus;
   public filePath: string;
@@ -15,6 +16,12 @@ export default class SavvyFile {
 
   private nowChunkIndex: number = 0;
   private IO: FilesystemIO | MemoryIO;
+
+  public offset: number = 0;
+  public crc: number = 0;
+
+  public headerPos: number = 0;
+  public bufferAcc: number = 0;
 
   constructor(path: string, name: string, fileSize: number, chunkSize: number, IO_instance: FilesystemIO | MemoryIO) {
     this.status = 'initializing';
@@ -30,6 +37,7 @@ export default class SavvyFile {
       tmpEnd = tmpStart + this.chunkSize;
       tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
       this.chunklist.push({
+        filePath: this.filePath,
         start: tmpStart,
         end: tmpEnd
       });
@@ -58,7 +66,6 @@ export default class SavvyFile {
     if (!this.chunklist[this.nowChunkIndex + 1]) {
       this.status = 'chunk_empty';
     }
-    console.log(this.chunklist, this.nowChunkIndex);
     return this.chunklist[this.nowChunkIndex++];
   }
 }

@@ -1223,72 +1223,6 @@
 	  return uppercase ? ext.toUpperCase() : ext.toLowerCase();
 	}
 
-	var SavvyFile =
-	/*#__PURE__*/
-	function () {
-	  function SavvyFile(path, name, fileSize, chunkSize, IO_instance) {
-	    var _this = this;
-
-	    classCallCheck(this, SavvyFile);
-
-	    this.chunklist = [];
-	    this.status = void 0;
-	    this.filePath = void 0;
-	    this.name = void 0;
-	    this.fileSize = void 0;
-	    this.chunkSize = void 0;
-	    this.fileWriter = void 0;
-	    this.fileEntry = void 0;
-	    this.nowChunkIndex = 0;
-	    this.IO = void 0;
-
-	    this.init = function () {
-	      return new Promise(function (resolve, reject) {
-	        _this.IO.getFileWriter(_this, function (result) {
-	          _this.fileWriter = result.fileWriter;
-	          _this.fileEntry = result.fileEntry;
-	          _this.status = 'inited';
-	          resolve();
-	        }, reject);
-	      });
-	    };
-
-	    this.status = 'initializing';
-	    this.filePath = path;
-	    this.name = name;
-	    this.fileSize = fileSize;
-	    this.chunkSize = chunkSize;
-	    this.IO = IO_instance;
-	    var tmpStart = 0,
-	        tmpEnd = 0;
-
-	    while (tmpEnd < this.fileSize) {
-	      tmpEnd = tmpStart + this.chunkSize;
-	      tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
-	      this.chunklist.push({
-	        start: tmpStart,
-	        end: tmpEnd
-	      });
-	      tmpStart = tmpEnd + 1;
-	    }
-	  }
-
-	  createClass(SavvyFile, [{
-	    key: "nextChunk",
-	    value: function nextChunk() {
-	      // make sure next chunk is available when status not chunk_empty
-	      if (!this.chunklist[this.nowChunkIndex + 1]) {
-	        this.status = 'chunk_empty';
-	      }
-
-	      console.log(this.chunklist, this.nowChunkIndex);
-	      return this.chunklist[this.nowChunkIndex++];
-	    }
-	  }]);
-
-	  return SavvyFile;
-	}();
-
 	/* export default class Crc32 {
 	  private crc: number = -1;
 	  // Uint32Array is actually slower than []
@@ -1607,7 +1541,7 @@
 	var ZipWriter =
 	/*#__PURE__*/
 	function () {
-	  function ZipWriter(writer) {
+	  function ZipWriter() {
 	    classCallCheck(this, ZipWriter);
 
 	    this.writer = void 0;
@@ -1616,7 +1550,6 @@
 	    this.dataLength = 0;
 	    this.offset = 0;
 	    this.dirData = [];
-	    this.writer = writer;
 	  }
 
 	  createClass(ZipWriter, [{
@@ -1624,87 +1557,83 @@
 	    value: function () {
 	      var _add = asyncToGenerator(
 	      /*#__PURE__*/
-	      regenerator.mark(function _callee(name, reader, fileSize, totalSize, isLast) {
-	        var _this = this;
-
-	        var buffer, crc, ziper, fileName, ebuf, header, centralDir, centralDirBuffer, end, tmpSize, tmpOffset, tmpBuf, i, _i, d, _d;
+	      regenerator.mark(function _callee(currentFile, zipFile, _buffer, isLast) {
+	        var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, end, tmpSize, tmpOffset, tmpBuf, i, _i;
 
 	        return regenerator.wrap(function _callee$(_context) {
 	          while (1) {
 	            switch (_context.prev = _context.next) {
 	              case 0:
-	                _context.next = 2;
-	                return reader.readUint8Array();
+	                // part of the current file.
+	                buffer = new Uint8Array(_buffer);
+	                crc = crc32(buffer, currentFile.crc || 0, buffer.byteLength);
+	                ziper = new ZIPClass(zipFile.fileSize);
+	                fileName = unescape(encodeURIComponent(currentFile.name));
+	                currentFile.bufferAcc += buffer.byteLength;
 
-	              case 2:
-	                buffer = _context.sent;
-	                crc = crc32(buffer, 0, buffer.byteLength);
-	                ziper = new ZIPClass(totalSize); // begin set header
+	                if (currentFile.offset === 0) {
+	                  // begin set header
+	                  currentFile.headerPos = zipFile.offset;
+	                  ebuf = ezBuffer(1 + 4 + 4 + fileName.length);
+	                  ebuf.i16(zipUtf8ExtraId);
+	                  ebuf.i16(5 + fileName.length); // size
 
-	                fileName = unescape(encodeURIComponent(name));
-	                ebuf = ezBuffer(1 + 4 + 4 + fileName.length);
-	                ebuf.i16(zipUtf8ExtraId);
-	                ebuf.i16(5 + fileName.length); // size
+	                  ebuf.i8(1); // version
 
-	                ebuf.i8(1); // version
+	                  ebuf.i32(crc32(fileName));
+	                  ebuf.appendBytes(fileName);
+	                  header = ziper.ZipHeader(fileName, currentFile.fileSize
+	                  /* TO-DO: add file date */
+	                  , ebuf.getArray());
+	                  d = new Uint8Array(header.byteLength + buffer.byteLength);
+	                  d.set(header, 0);
+	                  d.set(buffer, header.byteLength);
+	                  buffer = d;
+	                  console.log('add header');
+	                } // begin set central directory
 
-	                ebuf.i32(crc32(fileName));
-	                ebuf.appendBytes(fileName);
-	                header = ziper.ZipHeader(fileName, fileSize
-	                /* TO-DO: add file date */
-	                , ebuf.getArray());
-	                console.log('add header'); // var d = new Uint8Array(header.byteLength + buffer.byteLength);
-	                // d.set(header, 0);
-	                // d.set(buffer, header.byteLength);
-	                // buffer = d;
-	                // set header complete...
-	                // begin set central directory
 
-	                centralDir = ziper.ZipCentralDirectory(fileName, fileSize, fileSize, crc, false, this.offset);
-	                this.dirData.push(centralDir.dirRecord);
-	                centralDirBuffer = centralDir.dataDescriptor;
-	                console.log('add central directory');
+	                if (currentFile.bufferAcc === currentFile.fileSize) {
+	                  centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
+	                  zipFile.dirData.push(centralDir.dirRecord);
+	                  centralDirBuffer = centralDir.dataDescriptor;
+	                  _d = new Uint8Array(buffer.byteLength + centralDirBuffer.byteLength);
+
+	                  _d.set(buffer, 0);
+
+	                  _d.set(centralDirBuffer, buffer.byteLength);
+
+	                  buffer = _d;
+	                } else {
+	                  currentFile.offset += buffer.byteLength;
+	                }
 
 	                if (isLast) {
-	                  end = ziper.ZipSuffix(this.offset + buffer.byteLength + header.byteLength + centralDirBuffer.byteLength, this.dirData);
+	                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData);
 	                  console.log('this file is the last to be added to this zip, add end.');
-	                  tmpSize = 0, tmpOffset = centralDirBuffer.byteLength;
+	                  tmpSize = 0, tmpOffset = buffer.byteLength;
 
-	                  for (i in this.dirData) {
-	                    tmpSize += this.dirData[i].byteLength;
+	                  for (i in zipFile.dirData) {
+	                    tmpSize += zipFile.dirData[i].byteLength;
 	                  }
 
-	                  tmpBuf = new Uint8Array(centralDirBuffer.byteLength + tmpSize + end.byteLength);
-	                  tmpBuf.set(centralDirBuffer, 0);
+	                  tmpBuf = new Uint8Array(buffer.byteLength + tmpSize + end.byteLength);
+	                  tmpBuf.set(buffer, 0);
 
-	                  for (_i in this.dirData) {
+	                  for (_i in zipFile.dirData) {
 	                    // console.log(this.dirData[i], tmpOffset);
-	                    tmpBuf.set(this.dirData[_i], tmpOffset);
-	                    tmpOffset += this.dirData[_i].byteLength;
+	                    tmpBuf.set(zipFile.dirData[_i], tmpOffset);
+	                    tmpOffset += zipFile.dirData[_i].byteLength;
 	                  }
 
 	                  tmpBuf.set(end, tmpOffset);
-	                  d = new Uint8Array(header.byteLength + buffer.byteLength + tmpBuf.byteLength);
-	                  d.set(header, 0);
-	                  d.set(buffer, header.byteLength);
-	                  d.set(tmpBuf, header.byteLength + buffer.byteLength);
-	                  buffer = d;
-	                } else {
-	                  _d = new Uint8Array(header.byteLength + buffer.byteLength + centralDirBuffer.byteLength);
-
-	                  _d.set(header, 0);
-
-	                  _d.set(buffer, header.byteLength);
-
-	                  _d.set(centralDirBuffer, header.byteLength + buffer.byteLength);
-
-	                  buffer = _d;
+	                  buffer = tmpBuf;
 	                }
 
-	                this.offset += buffer.byteLength;
+	                zipFile.offset += buffer.byteLength;
 	                console.log('get a finalliy buffer, length: ' + buffer.byteLength);
 	                return _context.abrupt("return", new Promise(function (resolve, reject) {
-	                  var tmpWrite = _this.writer;
+	                  var tmpWrite = zipFile.fileWriter;
 
 	                  tmpWrite.onwriteend = function (e) {
 	                    resolve();
@@ -1717,7 +1646,7 @@
 	                  tmpWrite.write(new Blob([buffer]));
 	                }));
 
-	              case 22:
+	              case 11:
 	              case "end":
 	                return _context.stop();
 	            }
@@ -1725,7 +1654,7 @@
 	        }, _callee, this);
 	      }));
 
-	      function add(_x, _x2, _x3, _x4, _x5) {
+	      function add(_x, _x2, _x3, _x4) {
 	        return _add.apply(this, arguments);
 	      }
 
@@ -1839,7 +1768,7 @@
 	  createClass(BlobReader, [{
 	    key: "readUint8Array",
 	    value: function readUint8Array() {
-	      var _this2 = this;
+	      var _this = this;
 
 	      return new Promise(function (resolve, reject) {
 	        var reader = new FileReader(); // TO-DO: may be wrong
@@ -1853,7 +1782,7 @@
 	        };
 
 	        try {
-	          reader.readAsArrayBuffer(_this2.file);
+	          reader.readAsArrayBuffer(_this.file);
 	        } catch (e) {
 	          reject();
 	        }
@@ -1863,8 +1792,8 @@
 
 	  return BlobReader;
 	}();
-	function createZipWriter(writer) {
-	  return new ZipWriter(writer);
+	function createZipWriter() {
+	  return new ZipWriter();
 	}
 	var fileHeaderLen = 30;
 	var noCompression = 0;
@@ -2177,7 +2106,6 @@
 	    _this = possibleConstructorReturn(this, getPrototypeOf(FilesystemIO).call(this));
 
 	    _this.saveLink = function (file, objectURL) {
-	      console.log(file, objectURL);
 	      var link = typeof objectURL === 'string' && objectURL;
 	      var dlLinkNode = document.createElement('a');
 	      dlLinkNode.download = file.name;
@@ -2209,8 +2137,7 @@
 	      }, function (directoryEntry) {
 	        var dirReader = directoryEntry.createReader();
 	        dirReader.readEntries(function (entries) {
-	          console.log(entries); // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
-
+	          // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
 	          entries.map(function (entry) {
 	            entry.remove(function () {
 	              console.log('remove file [' + entry.name + '] from filesystem successful.');
@@ -2314,44 +2241,34 @@
 	  }, {
 	    key: "write",
 	    value: function write(file, buffer) {
-	      console.log('filesystem write');
 	      return new Promise(function (resolve, reject) {
 	        if (file.fileWriter) {
 	          var fileWriter = file.fileWriter;
 
-	          try {
-	            fileWriter.onwriteend = function (e) {
+	          if (file.isZip) {
+	            var tmpZipFile = file;
+	            var zipWriter = createZipWriter();
+	            var currentFile = tmpZipFile.currentFile;
+	            zipWriter.add(currentFile, tmpZipFile, buffer, tmpZipFile.nowChunkIndex === tmpZipFile.chunklist.length).then(function () {
 	              resolve();
-	            };
+	            });
+	          } else {
+	            try {
+	              fileWriter.onwriteend = function (e) {
+	                resolve();
+	              };
 
-	            fileWriter.write(new Blob([buffer]));
-	          } catch (e) {
-	            console.log(e);
-	            reject();
+	              fileWriter.write(new Blob([buffer]));
+	            } catch (e) {
+	              console.log(e);
+	              reject();
+	            }
 	          }
 	        } else {
 	          console.log('file has no file writer');
 	          reject();
 	        }
 	      });
-	      /* if (this.fileWriter) {
-	        try {
-	          this.fileWriter!.write(new Blob([buffer]));
-	           return new Promise((resolve, reject) => {
-	            this.writeEndResolve = resolve;
-	            this.writeEndReject = reject;
-	          });
-	        } catch (e) {
-	          console.log(e);
-	           return new Promise((resolve, reject) => {
-	            reject(e);
-	          });
-	        }
-	      } else {
-	        return new Promise((resolve, reject) => {
-	          reject('no file writer.');
-	        });
-	      } */
 	    }
 	    /**
 	     * @param {SavvyFile}File
@@ -2364,151 +2281,79 @@
 	    value: function download(files) {
 	      var _this3 = this;
 
-	      var asZip = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
-	      console.log('filesystem download');
+	      var _loop = function _loop(i, l) {
+	        var fileEntry = files[i].fileEntry;
 
-	      if (asZip) {
-	        this.downloadAsZip(files);
-	      } else {
-	        var _loop = function _loop(i, l) {
-	          var fileEntry = files[i].fileEntry;
-
-	          if (typeof files[i].fileEntry.file === 'function') {
-	            try {
-	              fileEntry.file(function (file) {
-	                _this3.saveFile(files[i], file);
-	              }, function () {
-	                _this3.saveLink(files[i]);
-	              });
-	            } catch (e) {
-	              console.log(e);
-	            }
-	          } else {
-	            _this3.saveLink(files[i]);
+	        if (typeof files[i].fileEntry.file === 'function') {
+	          try {
+	            fileEntry.file(function (file) {
+	              _this3.saveFile(files[i], file);
+	            }, function () {
+	              _this3.saveLink(files[i]);
+	            });
+	          } catch (e) {
+	            console.log(e);
 	          }
-	        };
-
-	        // normal donwload
-	        for (var i = 0, l = files.length; i < l; i++) {
-	          _loop(i, l);
+	        } else {
+	          _this3.saveLink(files[i]);
 	        }
+	      };
+
+	      for (var i = 0, l = files.length; i < l; i++) {
+	        _loop(i, l);
 	      }
 	    }
-	  }, {
-	    key: "downloadAsZip",
-	    value: function () {
-	      var _downloadAsZip = asyncToGenerator(
-	      /*#__PURE__*/
-	      regenerator.mark(function _callee(files) {
-	        var _this4 = this;
-
-	        var tmpZipFile, totalFileSize, writer, zipWriter, _loop2, i, l;
-
-	        return regenerator.wrap(function _callee$(_context2) {
-	          while (1) {
-	            switch (_context2.prev = _context2.next) {
-	              case 0:
-	                _context2.next = 2;
-	                return this.createTmpFile();
-
-	              case 2:
-	                tmpZipFile = _context2.sent;
-	                totalFileSize = files.reduce(function (prev, cur, curIndex, arr) {
-	                  return prev + cur.fileSize;
-	                }, 0); // creative a zip writer(a zip writer need a reader to provide data, and a writer to writer zip data to zip file.)
-
-	                _context2.next = 6;
-	                return new Promise(function (resolve, reject) {
-	                  tmpZipFile.createWriter(function (fileWriter) {
-	                    resolve(fileWriter);
-	                  }, function () {
-	                    reject();
-	                  });
-	                });
-
-	              case 6:
-	                writer = _context2.sent;
-	                zipWriter = createZipWriter(writer); // add all files into zip writer, and writer to fs://root/tmp.zip
-
-	                _loop2 =
-	                /*#__PURE__*/
-	                regenerator.mark(function _loop2(i, l) {
-	                  var tmpFile;
-	                  return regenerator.wrap(function _loop2$(_context) {
-	                    while (1) {
-	                      switch (_context.prev = _context.next) {
-	                        case 0:
-	                          _context.next = 2;
-	                          return new Promise(function (resolve, reject) {
-	                            files[i].fileEntry.file(resolve, reject);
-	                          });
-
-	                        case 2:
-	                          tmpFile = _context.sent;
-	                          _context.next = 5;
-	                          return zipWriter.add(files[i].name, new BlobReader(tmpFile), files[i].fileSize, totalFileSize, i === l - 1);
-
-	                        case 5:
-	                        case "end":
-	                          return _context.stop();
-	                      }
-	                    }
-	                  }, _loop2, this);
-	                });
-	                i = 0, l = files.length;
-
-	              case 10:
-	                if (!(i < l)) {
-	                  _context2.next = 15;
-	                  break;
-	                }
-
-	                return _context2.delegateYield(_loop2(i, l), "t0", 12);
-
-	              case 12:
-	                i++;
-	                _context2.next = 10;
-	                break;
-
-	              case 15:
-	                // download this zip file
-	                if (typeof tmpZipFile.file === 'function') {
-	                  try {
-	                    tmpZipFile.file(function (file) {
-	                      console.log(file);
-
-	                      var _file = new File([file], 'tmp.zip', {
-	                        type: filemime('tmp.zip')
-	                      });
-
-	                      _this4.saveLink(new SavvyFile('', 'tmp.zip', 0, 0, _this4), window.URL.createObjectURL(_file)); // this.saveFile(files[0], file);
-
-	                    }, function () {
-	                      _this4.saveLink(files[0]);
-	                    });
-	                  } catch (e) {
-	                    console.log(e);
-	                  }
-	                } else {
-	                  this.saveLink(files[0]);
-	                }
-
-	                return _context2.abrupt("return");
-
-	              case 17:
-	              case "end":
-	                return _context2.stop();
-	            }
+	    /* private async downloadAsZip(files: SavvyFile[]): Promise<undefined> {
+	      // create a tmpFile for zip buffer.
+	      let tmpZipFile: FileEntry = await this.createTmpFile();
+	       let totalFileSize: number = files.reduce((prev: number, cur: SavvyFile, curIndex: number, arr: SavvyFile[]) => prev + cur.fileSize, 0);
+	       // creative a zip writer(a zip writer need a reader to provide data, and a writer to writer zip data to zip file.)
+	      let writer: FileWriter = await new Promise((resolve: Function, reject: Function) => {
+	        tmpZipFile.createWriter(
+	          (fileWriter: FileWriter) => {
+	            resolve(fileWriter);
+	          },
+	          () => {
+	            reject();
 	          }
-	        }, _callee, this);
-	      }));
-
-	      function downloadAsZip(_x) {
-	        return _downloadAsZip.apply(this, arguments);
+	        );
+	      });
+	       let zipWriter: ZipWriter = createZipWriter(writer);
+	       // add all files into zip writer, and writer to fs://root/tmp.zip
+	      for (let i: number = 0, l: number = files.length; i < l; i++) {
+	        // get File Obj
+	        // TO-DO: stupid thing is, we use Filesystem to store the file but at here we read it to memory again!
+	        // WHATEVER SOMETHING MUST BE FOUND TO SOLVE THIS SHIT!
+	        let tmpFile: File = await new Promise((resolve: FileCallback, reject: ErrorCallback) => {
+	          (files[i].fileEntry as FileEntry).file(resolve, reject);
+	        });
+	        await zipWriter.add(files[i].name, new BlobReader(tmpFile), files[i].fileSize, totalFileSize, i === l - 1);
 	      }
+	       // download this zip file
+	      if (typeof tmpZipFile.file === 'function') {
+	        try {
+	          tmpZipFile.file(
+	            (file: File) => {
+	              console.log(file);
+	              let _file: File = new File([file], 'tmp.zip', {
+	                type: filemime('tmp.zip')
+	              });
+	               this.saveLink(new SavvyFile('', 'tmp.zip', 0, 0, this), window.URL.createObjectURL(_file));
+	              // this.saveFile(files[0], file);
+	            },
+	            () => {
+	              this.saveLink(files[0]);
+	            }
+	          );
+	        } catch (e) {
+	          console.log(e);
+	        }
+	      } else {
+	        this.saveLink(files[0]);
+	      }
+	       return;
+	    } */
 
-	      return downloadAsZip;
-	    }()
 	    /**
 	     * @param {SavvyFile}file
 	     * @param {String?}objectURL
@@ -2519,6 +2364,170 @@
 
 	  return FilesystemIO;
 	}(IO);
+
+	var SavvyFile =
+	/*#__PURE__*/
+	function () {
+	  function SavvyFile(path, name, fileSize, chunkSize, IO_instance) {
+	    var _this = this;
+
+	    classCallCheck(this, SavvyFile);
+
+	    this.isZip = false;
+	    this.chunklist = [];
+	    this.status = void 0;
+	    this.filePath = void 0;
+	    this.name = void 0;
+	    this.fileSize = void 0;
+	    this.chunkSize = void 0;
+	    this.fileWriter = void 0;
+	    this.fileEntry = void 0;
+	    this.nowChunkIndex = 0;
+	    this.IO = void 0;
+	    this.offset = 0;
+	    this.crc = 0;
+	    this.headerPos = 0;
+	    this.bufferAcc = 0;
+
+	    this.init = function () {
+	      return new Promise(function (resolve, reject) {
+	        _this.IO.getFileWriter(_this, function (result) {
+	          _this.fileWriter = result.fileWriter;
+	          _this.fileEntry = result.fileEntry;
+	          _this.status = 'inited';
+	          resolve();
+	        }, reject);
+	      });
+	    };
+
+	    this.status = 'initializing';
+	    this.filePath = path;
+	    this.name = name;
+	    this.fileSize = fileSize;
+	    this.chunkSize = chunkSize;
+	    this.IO = IO_instance;
+	    var tmpStart = 0,
+	        tmpEnd = 0;
+
+	    while (tmpEnd < this.fileSize) {
+	      tmpEnd = tmpStart + this.chunkSize;
+	      tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
+	      this.chunklist.push({
+	        filePath: this.filePath,
+	        start: tmpStart,
+	        end: tmpEnd
+	      });
+	      tmpStart = tmpEnd + 1;
+	    }
+	  }
+
+	  createClass(SavvyFile, [{
+	    key: "nextChunk",
+	    value: function nextChunk() {
+	      // make sure next chunk is available when status not chunk_empty
+	      if (!this.chunklist[this.nowChunkIndex + 1]) {
+	        this.status = 'chunk_empty';
+	      }
+
+	      return this.chunklist[this.nowChunkIndex++];
+	    }
+	  }]);
+
+	  return SavvyFile;
+	}();
+
+	var SavvyZipFile =
+	/*#__PURE__*/
+	function () {
+	  function SavvyZipFile(files, name, IO_instance) {
+	    var _this = this;
+
+	    classCallCheck(this, SavvyZipFile);
+
+	    this.chunklist = [];
+	    this.status = void 0;
+	    this.isZip = true;
+	    this.fileWriter = void 0;
+	    this.fileEntry = void 0;
+	    this.name = void 0;
+	    this.fileSize = 0;
+	    this.totalSize = void 0;
+	    this.files = void 0;
+	    this.nowChunkIndex = 0;
+	    this.IO = void 0;
+	    this.offset = 0;
+	    this.dirData = [];
+
+	    this.init = function () {
+	      return new Promise(function (resolve, reject) {
+	        _this.IO.getFileWriter(_this, function (result) {
+	          _this.fileWriter = result.fileWriter;
+	          _this.fileEntry = result.fileEntry;
+	          _this.status = 'inited';
+	          resolve();
+	        }, reject);
+	      });
+	    };
+
+	    this.status = 'initializing';
+	    this.IO = IO_instance;
+	    this.name = name;
+	    this.files = files;
+	    this.totalSize = files.reduce(function (prev, cur) {
+	      return prev + cur.fileSize;
+	    }, 0);
+
+	    for (var i = 0, l = files.length; i < l; i++) {
+	      this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length
+	      /* header */
+	      + 46 + files[i].name.length
+	      /* dirRecord */
+	      ;
+	    } // extra bytes for each ZipCentralDirectory
+
+
+	    this.fileSize += files.length * 28; // extra bytes for each dataDescriptor
+
+	    this.fileSize += files.length * 24; // final bytes
+
+	    this.fileSize += 98;
+	    this.chunklist = files.reduce(function (pre, file) {
+	      return pre.concat(file.chunklist);
+	    }, []);
+	  }
+
+	  createClass(SavvyZipFile, [{
+	    key: "nextChunk",
+	    value: function nextChunk() {
+	      // make sure next chunk is available when status not chunk_empty
+	      if (!this.chunklist[this.nowChunkIndex + 1]) {
+	        this.status = 'chunk_empty';
+	      }
+
+	      return this.chunklist[this.nowChunkIndex++];
+	    }
+	  }, {
+	    key: "currentFile",
+	    get: function get() {
+	      var tmpNowChunkIndex = this.nowChunkIndex - 1;
+	      var numChunks = 0;
+	      var tmpNowFile = this.files[0];
+
+	      for (var i = 0, l = this.files.length; i < l; i++) {
+	        numChunks += this.files[i].chunklist.length;
+
+	        if (tmpNowChunkIndex < numChunks) {
+	          tmpNowFile = this.files[i];
+	          break;
+	        }
+	      }
+
+	      return tmpNowFile;
+	    }
+	  }]);
+
+	  return SavvyZipFile;
+	}();
 
 	var IS64BIT = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(navigator.userAgent);
 
@@ -2538,39 +2547,28 @@
 	    this.waitReadyAndDownload = false;
 	    this.files = [];
 
-	    this.scheduleDownload = function (filesForZip) {
+	    this.scheduleDownload = function (fileForZip) {
 	      if (_this.readyForDownload) {
-	        console.log('start download...', _this.files);
-
-	        if (filesForZip) {
-	          // download all file in filesForZip, and store as a single zip file.
-	          if (filesForZip.length > 0) {
-	            var nextFile = filesForZip.find(function (file) {
-	              return file.status === 'inited';
-	            }); // 还有等待下载的文件
-
-	            if (nextFile) {
-	              _this.fetchData(nextFile);
-	            } else {
-	              _this.IO.download(filesForZip.filter(function (file) {
-	                return file.status === 'chunk_empty';
-	              }));
-	            }
+	        if (fileForZip) {
+	          if (fileForZip.status === 'inited') {
+	            _this.fetchData(fileForZip);
+	          } else {
+	            _this.IO.download([fileForZip]);
 	          }
 	        } else {
 	          // normal download, as sperate files.
 	          if (_this.files.length > 0) {
-	            var _nextFile = _this.files.find(function (file) {
+	            var nextFile = _this.files.find(function (file) {
 	              return file.status === 'inited';
 	            }); // 还有等待下载的文件
 
 
-	            if (_nextFile) {
-	              _this.fetchData(_nextFile);
+	            if (nextFile) {
+	              _this.fetchData(nextFile);
 	            } else {
 	              _this.IO.download(_this.files.filter(function (file) {
 	                return file.status === 'chunk_empty';
-	              }), true);
+	              }));
 	            }
 	          }
 	        }
@@ -2591,32 +2589,36 @@
 	            switch (_context.prev = _context.next) {
 	              case 0:
 	                // here must be an unprocessed block, cos file.status is not 'chunk_empty'
-	                nextChunk = file.nextChunk();
-	                console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
-	                _context.next = 4;
-	                return fetch(file.filePath, {
+	                nextChunk = file.nextChunk(); // console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
+
+	                _context.next = 3;
+	                return fetch(nextChunk.filePath, {
 	                  method: 'GET',
 	                  headers: {
 	                    Range: "bytes=".concat(nextChunk.start, "-").concat(nextChunk.end)
 	                  }
 	                });
 
-	              case 4:
+	              case 3:
 	                response = _context.sent;
-	                _context.next = 7;
+	                _context.next = 6;
 	                return response.arrayBuffer();
 
-	              case 7:
+	              case 6:
 	                buffer = _context.sent;
-	                _context.next = 10;
+	                _context.next = 9;
 	                return _this.IO.write(file, buffer);
 
-	              case 10:
-	                _this.scheduleDownload();
+	              case 9:
+	                if (file.isZip) {
+	                  _this.scheduleDownload(file);
+	                } else {
+	                  _this.scheduleDownload();
+	                }
 
 	                return _context.abrupt("return");
 
-	              case 12:
+	              case 11:
 	              case "end":
 	                return _context.stop();
 	            }
@@ -2650,36 +2652,56 @@
 	      var _addFiles = asyncToGenerator(
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee2(files) {
-	        var savvyFiles, i, l, tmpFile;
+	        var asZip,
+	            savvyFiles,
+	            i,
+	            l,
+	            tmpFile,
+	            zipFile,
+	            _args2 = arguments;
 	        return regenerator.wrap(function _callee2$(_context2) {
 	          while (1) {
 	            switch (_context2.prev = _context2.next) {
 	              case 0:
+	                asZip = _args2.length > 1 && _args2[1] !== undefined ? _args2[1] : false;
 	                savvyFiles = [];
 	                i = 0, l = files.length;
 
-	              case 2:
+	              case 3:
 	                if (!(i < l)) {
-	                  _context2.next = 10;
+	                  _context2.next = 11;
 	                  break;
 	                }
 
-	                _context2.next = 5;
-	                return this._addFile(files[i].path, files[i].name);
+	                _context2.next = 6;
+	                return this._addFile(files[i].path, files[i].name, asZip);
 
-	              case 5:
+	              case 6:
 	                tmpFile = _context2.sent;
 
 	                if (tmpFile) {
 	                  savvyFiles.push(tmpFile);
 	                }
 
-	              case 7:
+	              case 8:
 	                i++;
-	                _context2.next = 2;
+	                _context2.next = 3;
 	                break;
 
-	              case 10:
+	              case 11:
+	                zipFile = null;
+
+	                if (!asZip) {
+	                  _context2.next = 16;
+	                  break;
+	                }
+
+	                // create a zip file
+	                zipFile = new SavvyZipFile(savvyFiles, 'test.zip', this.IO);
+	                _context2.next = 16;
+	                return zipFile.init();
+
+	              case 16:
 	                this.readyForDownload = true;
 
 	                if (this.waitReadyAndDownload) {
@@ -2687,9 +2709,17 @@
 	                  this.scheduleDownload();
 	                }
 
+	                if (!asZip) {
+	                  _context2.next = 22;
+	                  break;
+	                }
+
+	                return _context2.abrupt("return", zipFile);
+
+	              case 22:
 	                return _context2.abrupt("return", savvyFiles);
 
-	              case 13:
+	              case 23:
 	              case "end":
 	                return _context2.stop();
 	            }
@@ -2743,33 +2773,6 @@
 	      return addFile;
 	    }()
 	  }, {
-	    key: "addZipFiles",
-	    value: function () {
-	      var _addZipFiles = asyncToGenerator(
-	      /*#__PURE__*/
-	      regenerator.mark(function _callee4(files) {
-	        return regenerator.wrap(function _callee4$(_context4) {
-	          while (1) {
-	            switch (_context4.prev = _context4.next) {
-	              case 0:
-	                console.log('add zip files...');
-	                return _context4.abrupt("return");
-
-	              case 2:
-	              case "end":
-	                return _context4.stop();
-	            }
-	          }
-	        }, _callee4, this);
-	      }));
-
-	      function addZipFiles(_x5) {
-	        return _addZipFiles.apply(this, arguments);
-	      }
-
-	      return addZipFiles;
-	    }()
-	  }, {
 	    key: "showFiles",
 	    value: function showFiles() {
 	      console.log('show files');
@@ -2779,24 +2782,28 @@
 	    value: function () {
 	      var _addFile3 = asyncToGenerator(
 	      /*#__PURE__*/
-	      regenerator.mark(function _callee5(path, name) {
-	        var response, fileSize, tmpFile;
-	        return regenerator.wrap(function _callee5$(_context5) {
+	      regenerator.mark(function _callee4(path, name) {
+	        var asZip,
+	            response,
+	            fileSize,
+	            tmpFile,
+	            _args4 = arguments;
+	        return regenerator.wrap(function _callee4$(_context4) {
 	          while (1) {
-	            switch (_context5.prev = _context5.next) {
+	            switch (_context4.prev = _context4.next) {
 	              case 0:
-	                console.log('begin download: ' + path);
+	                asZip = _args4.length > 2 && _args4[2] !== undefined ? _args4[2] : false;
 
 	                if (path) {
-	                  _context5.next = 4;
+	                  _context4.next = 4;
 	                  break;
 	                }
 
 	                console.log('file path invalid.');
-	                return _context5.abrupt("return");
+	                return _context4.abrupt("return");
 
 	              case 4:
-	                _context5.next = 6;
+	                _context4.next = 6;
 	                return fetch(path, {
 	                  method: 'GET',
 	                  headers: {
@@ -2805,15 +2812,15 @@
 	                });
 
 	              case 6:
-	                response = _context5.sent;
+	                response = _context4.sent;
 
 	                if (response.headers.get('content-range')) {
-	                  _context5.next = 10;
+	                  _context4.next = 10;
 	                  break;
 	                }
 
 	                console.log('can not get file size, check file path or contact service provider.');
-	                return _context5.abrupt("return");
+	                return _context4.abrupt("return");
 
 	              case 10:
 	                // calculate whether the size limit is exceeded
@@ -2825,23 +2832,30 @@
 	                // create new file
 
 	                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO); // ensure each file get it's writer from IO
+	                // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
+	                //  in other word, this savvyfile does not need a writer(init);
 
-	                _context5.next = 14;
+	                if (asZip) {
+	                  _context4.next = 15;
+	                  break;
+	                }
+
+	                _context4.next = 15;
 	                return tmpFile.init();
 
-	              case 14:
+	              case 15:
 	                this.files.push(tmpFile);
-	                return _context5.abrupt("return", tmpFile);
+	                return _context4.abrupt("return", tmpFile);
 
-	              case 16:
+	              case 17:
 	              case "end":
-	                return _context5.stop();
+	                return _context4.stop();
 	            }
 	          }
-	        }, _callee5, this);
+	        }, _callee4, this);
 	      }));
 
-	      function _addFile(_x6, _x7) {
+	      function _addFile(_x5, _x6) {
 	        return _addFile3.apply(this, arguments);
 	      }
 

@@ -2,6 +2,7 @@ import IO from './IO';
 import { filemime } from '../utils/index';
 import SavvyFile from '../file';
 import { createZipWriter, ZipWriter, BlobReader } from './zip';
+import SavvyZipFile from '../zip_file';
 
 const customWindow: any = window;
 const TEMPORARY: number = 0;
@@ -19,8 +20,6 @@ export default class FilesystemIO extends IO {
         let dirReader: DirectoryReader = directoryEntry.createReader();
 
         dirReader.readEntries((entries: Entry[]) => {
-          console.log(entries);
-
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
           entries.map((entry: Entry) => {
             entry.remove(() => {
@@ -36,7 +35,7 @@ export default class FilesystemIO extends IO {
    * @param {Function} successCallback
    * @param {Function} errorCallback
    */
-  public getFileWriter(file: SavvyFile, successCallback: Function, errorCallback: Function): void {
+  public getFileWriter(file: SavvyFile | SavvyZipFile, successCallback: Function, errorCallback: Function): void {
     customWindow.requestFileSystem(TEMPORARY, file.fileSize, (fs: FileSystem) => {
       fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
         fs.root.getFile('savvy/' + file.name, { create: true }, (fileEntry: FileEntry) => {
@@ -120,46 +119,33 @@ export default class FilesystemIO extends IO {
    * @param {SavvyFile} file
    * @param {ArrayBuffer} buffer
    */
-  public write(file: SavvyFile, buffer: ArrayBuffer): Promise<any> {
-    console.log('filesystem write');
+  public write(file: SavvyFile | SavvyZipFile, buffer: ArrayBuffer): Promise<any> {
     return new Promise((resolve, reject) => {
       if (file.fileWriter) {
         let fileWriter: FileWriter = file.fileWriter as FileWriter;
-        try {
-          fileWriter.onwriteend = (e: ProgressEvent) => {
+        if (file.isZip) {
+          let tmpZipFile: SavvyZipFile = file as SavvyZipFile;
+          let zipWriter: ZipWriter = createZipWriter();
+          let currentFile: SavvyFile = tmpZipFile.currentFile;
+          zipWriter.add(currentFile, tmpZipFile, buffer, tmpZipFile.nowChunkIndex === tmpZipFile.chunklist.length).then(() => {
             resolve();
-          };
-          fileWriter.write(new Blob([buffer]));
-        } catch (e) {
-          console.log(e);
-          reject();
+          });
+        } else {
+          try {
+            fileWriter.onwriteend = (e: ProgressEvent) => {
+              resolve();
+            };
+            fileWriter.write(new Blob([buffer]));
+          } catch (e) {
+            console.log(e);
+            reject();
+          }
         }
       } else {
         console.log('file has no file writer');
         reject();
       }
     });
-
-    /* if (this.fileWriter) {
-      try {
-        this.fileWriter!.write(new Blob([buffer]));
-
-        return new Promise((resolve, reject) => {
-          this.writeEndResolve = resolve;
-          this.writeEndReject = reject;
-        });
-      } catch (e) {
-        console.log(e);
-
-        return new Promise((resolve, reject) => {
-          reject(e);
-        });
-      }
-    } else {
-      return new Promise((resolve, reject) => {
-        reject('no file writer.');
-      });
-    } */
   }
 
   /**
@@ -167,35 +153,29 @@ export default class FilesystemIO extends IO {
    * @param {SavvyFile[]}Files
    * @public
    */
-  public download(files: SavvyFile[], asZip: boolean = false): void {
-    console.log('filesystem download');
-    if (asZip) {
-      this.downloadAsZip(files);
-    } else {
-      // normal donwload
-      for (let i: number = 0, l: number = files.length; i < l; i++) {
-        let fileEntry: FileEntry = files[i].fileEntry as FileEntry;
-        if (typeof files[i].fileEntry.file === 'function') {
-          try {
-            fileEntry.file(
-              (file: File) => {
-                this.saveFile(files[i], file);
-              },
-              () => {
-                this.saveLink(files[i]);
-              }
-            );
-          } catch (e) {
-            console.log(e);
-          }
-        } else {
-          this.saveLink(files[i]);
+  public download(files: SavvyFile[] | SavvyZipFile[]): void {
+    for (let i: number = 0, l: number = files.length; i < l; i++) {
+      let fileEntry: FileEntry = files[i].fileEntry as FileEntry;
+      if (typeof files[i].fileEntry.file === 'function') {
+        try {
+          fileEntry.file(
+            (file: File) => {
+              this.saveFile(files[i], file);
+            },
+            () => {
+              this.saveLink(files[i]);
+            }
+          );
+        } catch (e) {
+          console.log(e);
         }
+      } else {
+        this.saveLink(files[i]);
       }
     }
   }
 
-  private async downloadAsZip(files: SavvyFile[]): Promise<undefined> {
+  /* private async downloadAsZip(files: SavvyFile[]): Promise<undefined> {
     // create a tmpFile for zip buffer.
     let tmpZipFile: FileEntry = await this.createTmpFile();
 
@@ -251,14 +231,13 @@ export default class FilesystemIO extends IO {
     }
 
     return;
-  }
+  } */
   /**
    * @param {SavvyFile}file
    * @param {String?}objectURL
    * @private
    */
-  private saveLink = (file: SavvyFile, objectURL?: string) => {
-    console.log(file, objectURL);
+  private saveLink = (file: SavvyFile | SavvyZipFile, objectURL?: string) => {
     let link: string | false = typeof objectURL === 'string' && objectURL;
     let dlLinkNode: HTMLAnchorElement = document.createElement('a');
 
@@ -272,7 +251,7 @@ export default class FilesystemIO extends IO {
    * @param {File}file
    * @private
    */
-  private saveFile = (savvyFile: SavvyFile, file: File) => {
+  private saveFile = (savvyFile: SavvyFile | SavvyZipFile, file: File) => {
     try {
       let _file: File = new File([file], savvyFile.name, {
         type: filemime(savvyFile.name)
