@@ -1,5 +1,6 @@
 import IO from './IO';
 import { filemime } from '../utils/index';
+import SavvyFile from '../file';
 
 const MSIE: boolean = typeof MSBlobBuilder === 'function';
 export default class MemoryIO extends IO {
@@ -16,7 +17,10 @@ export default class MemoryIO extends IO {
       this.blobList = [];
     }
   }
-  public write(buffer: ArrayBuffer): boolean {
+  public getFileWriter(): void {
+    return;
+  }
+  public write(file: SavvyFile, buffer: ArrayBuffer): boolean {
     console.log('memory write');
     try {
       if (MSIE) {
@@ -36,7 +40,7 @@ export default class MemoryIO extends IO {
     }
   }
 
-  public download(name: string): void {
+  public download(files: SavvyFile[]): void {
     let blob: Blob = this.getBlob(name);
     let blob_url: string = '';
     if (MSIE) {

@@ -7,7 +7,7 @@ const IS64BIT: boolean = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.
 class SavvyTransfer {
   static SIZE_LIMIT: number = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
   static CHUNK_SIZE: number = 1024 * 1024 * 16;
-  private IOMethod: typeof FilesystemIO | typeof MemoryIO;
+  private IO: FilesystemIO | MemoryIO;
   private size: number = 0;
 
   private fileInited: number = 0;
@@ -19,7 +19,7 @@ class SavvyTransfer {
   constructor() {
     // this.setIOMethod();
     // this.IOMethod = MemoryIO;
-    this.IOMethod = FilesystemIO;
+    this.IO = new FilesystemIO();
   }
 
   private setIOMethod() {
@@ -40,12 +40,24 @@ class SavvyTransfer {
         savvyFiles.push(tmpFile);
       }
     }
-    this.fileAllAdded = true;
+
+    this.readyForDownload = true;
+
+    if (this.waitReadyAndDownload) {
+      this.waitReadyAndDownload = false;
+      this.scheduleDownload();
+    }
     return savvyFiles;
   }
   public async addFile(path: string, name: string): Promise<SavvyFile | undefined> {
     let tmpFile: SavvyFile | undefined = await this._addFile(path, name);
-    this.fileAllAdded = true;
+
+    this.readyForDownload = true;
+    if (this.waitReadyAndDownload) {
+      this.waitReadyAndDownload = false;
+      this.scheduleDownload();
+    }
+
     return tmpFile;
   }
 
@@ -56,7 +68,6 @@ class SavvyTransfer {
   public showFiles() {
     console.log('show files');
   }
-  // 如果一次addFile
   private async _addFile(path: string, name: string): Promise<SavvyFile | undefined> {
     console.log('begin download: ' + path);
     if (!path) {
@@ -79,36 +90,41 @@ class SavvyTransfer {
       return;
     } */
     // create new file
-    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IOMethod!, this.handleFileInit);
+    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO);
+    // ensure each file get it's writer from IO
+    await tmpFile.init();
+
     this.files.push(tmpFile);
     return tmpFile;
   }
 
-  private handleFileInit = () => {
-    this.fileInited += 1;
-
-    if (this.fileAllAdded && this.fileInited === this.files.length) {
-      this.readyForDownload = true;
-      if (this.waitReadyAndDownload) {
-        this.waitReadyAndDownload = false;
-
-        this.scheduleDownload();
-      }
-    }
-  };
-
-  // add file 之后手动调用
-  public scheduleDownload = () => {
+  // add file 之后手动调用, 此时如果files还没有准备好, 则设置变量等待.
+  public scheduleDownload = (filesForZip?: SavvyFile[]) => {
     if (this.readyForDownload) {
       console.log('start download...', this.files);
-      if (this.files.length > 0) {
-        let nextFile: SavvyFile | undefined = this.files.find((file: SavvyFile) => file.status === 'inited');
+      if (filesForZip) {
+        // download all file in filesForZip, and store as a single zip file.
+        if (filesForZip.length > 0) {
+          let nextFile: SavvyFile | undefined = filesForZip.find((file: SavvyFile) => file.status === 'inited');
 
-        // 还有等待下载的文件
-        if (nextFile) {
-          this.fetchData(nextFile);
-        } else {
-          this.downloadFile(this.files.filter((file: SavvyFile) => file.status === 'chunk_empty'));
+          // 还有等待下载的文件
+          if (nextFile) {
+            this.fetchData(nextFile);
+          } else {
+            this.IO.download(filesForZip.filter((file: SavvyFile) => file.status === 'chunk_empty'));
+          }
+        }
+      } else {
+        // normal download, as sperate files.
+        if (this.files.length > 0) {
+          let nextFile: SavvyFile | undefined = this.files.find((file: SavvyFile) => file.status === 'inited');
+
+          // 还有等待下载的文件
+          if (nextFile) {
+            this.fetchData(nextFile);
+          } else {
+            this.IO.download(this.files.filter((file: SavvyFile) => file.status === 'chunk_empty'), true);
+          }
         }
       }
     } else {
@@ -120,17 +136,14 @@ class SavvyTransfer {
     let nextChunk: TChunk = file.nextChunk();
     console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
     let response: Response = await fetch(file.filePath, { method: 'GET', headers: { Range: `bytes=${nextChunk.start}-${nextChunk.end}` } });
-    await file.write(response);
+    let buffer: ArrayBuffer = await response.arrayBuffer();
+    await this.IO.write(file, buffer);
 
     this.scheduleDownload();
 
     return;
   };
-  private downloadFile(files: SavvyFile[]): void {
-    for (let i: number = 0, l: number = files.length; i < l; i++) {
-      files[i].download();
-    }
-  }
+
   public upload(name: string): void {
     console.log('upload');
   }

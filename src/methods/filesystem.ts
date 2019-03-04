@@ -1,32 +1,20 @@
 import IO from './IO';
 import { filemime } from '../utils/index';
+import SavvyFile from '../file';
+import { createZipWriter, ZipWriter, BlobReader } from './zip';
 
 const customWindow: any = window;
 const TEMPORARY: number = 0;
 const PERSISTENT: number = 1;
 
 export default class FilesystemIO extends IO {
-  private size: number;
-  private downloadSize: number = 0;
-  private fileName: string;
-
-  private fileWriter: FileWriter | null = null;
-  private fileEntry: FileEntry | null = null;
-  // private bufferCache: ArrayBuffer[] = [];
-
-  private writing: boolean = false;
-
-  private writeEndResolve: Function | null = null;
-  private writeEndReject: Function | null = null;
-
-  constructor(fileSize: number, name: string, initedCallback: Function) {
+  constructor() {
     super();
-    this.size = fileSize;
-    this.fileName = name;
     customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem;
     // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
     // window.requestFileSystem(type, size, successCallback[, errorCallback]);
-    customWindow.requestFileSystem(TEMPORARY, fileSize, (fs: FileSystem) => {
+    customWindow.requestFileSystem(TEMPORARY, 0x10000, (fs: FileSystem) => {
+      // free space....
       fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
         let dirReader: DirectoryReader = directoryEntry.createReader();
 
@@ -34,30 +22,35 @@ export default class FilesystemIO extends IO {
           console.log(entries);
 
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
-          /* entries.map((entry: Entry) => {
+          entries.map((entry: Entry) => {
             entry.remove(() => {
               console.log('remove file [' + entry.name + '] from filesystem successful.');
             });
-          }); */
-        });
-
-        fs.root.getFile('savvy/' + this.fileName, { create: true }, (fileEntry: FileEntry) => {
-          this.fileEntry = fileEntry;
-          fileEntry.createWriter((fw: FileWriter) => {
-            this.fileWriter = fw;
-            this.fileWriter.onwritestart = this.handleFileWriteStart;
-            this.fileWriter.onprogress = this.handleFileWriteProgress;
-            this.fileWriter.onerror = this.handleFileWriteError;
-            this.fileWriter.onwriteend = this.handleFileWriteEnd;
-
-            initedCallback && initedCallback();
           });
         });
       });
     });
   }
-
-  private handleFileWriteStart = (event: ProgressEvent): void => {
+  /**
+   * @param {SavvyFile} file
+   * @param {Function} successCallback
+   * @param {Function} errorCallback
+   */
+  public getFileWriter(file: SavvyFile, successCallback: Function, errorCallback: Function): void {
+    customWindow.requestFileSystem(TEMPORARY, file.fileSize, (fs: FileSystem) => {
+      fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
+        fs.root.getFile('savvy/' + file.name, { create: true }, (fileEntry: FileEntry) => {
+          fileEntry.createWriter((fw: FileWriter) => {
+            successCallback({
+              fileEntry: fileEntry,
+              fileWriter: fw
+            });
+          });
+        });
+      });
+    });
+  }
+  /* private handleFileWriteStart = (event: ProgressEvent): void => {
     console.log(event);
 
     this.writing = true;
@@ -81,14 +74,73 @@ export default class FilesystemIO extends IO {
       this.writeEndReject = null;
       this.writeEndResolve = null;
     }
-  };
+  }; */
   // Try to free space before starting the download.
   // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
   private free_space(callback: Function, ms: number, delta: any): void {}
-  public write(buffer: ArrayBuffer): Promise<any> {
+
+  private createTmpFile(): Promise<FileEntry> {
+    let tmpFileName: string = 'tmp.zip';
+
+    return new Promise((resolve: Function, reject: Function) => {
+      customWindow.requestFileSystem(TEMPORARY, 4 * 1024 * 1024 * 1024, (fs: FileSystem) => {
+        fs.root.getFile(
+          tmpFileName,
+          undefined,
+          (file: FileEntry) => {
+            file.remove(
+              () => {
+                this.create(fs, tmpFileName, resolve, reject);
+              },
+              () => {
+                this.create(fs, tmpFileName, resolve, reject);
+              }
+            );
+          },
+          () => {
+            this.create(fs, tmpFileName, resolve, reject);
+          }
+        );
+      });
+    });
+  }
+  private create(fs: FileSystem, tmpFileName: string, resolve: Function, reject: Function): void {
+    fs.root.getFile(
+      tmpFileName,
+      { create: true },
+      (tmpFile: FileEntry) => {
+        resolve(tmpFile);
+      },
+      () => {
+        reject();
+      }
+    );
+  }
+  /**
+   * @param {SavvyFile} file
+   * @param {ArrayBuffer} buffer
+   */
+  public write(file: SavvyFile, buffer: ArrayBuffer): Promise<any> {
     console.log('filesystem write');
-    // has requested fs and get a file writer...
-    if (this.fileWriter) {
+    return new Promise((resolve, reject) => {
+      if (file.fileWriter) {
+        let fileWriter: FileWriter = file.fileWriter as FileWriter;
+        try {
+          fileWriter.onwriteend = (e: ProgressEvent) => {
+            resolve();
+          };
+          fileWriter.write(new Blob([buffer]));
+        } catch (e) {
+          console.log(e);
+          reject();
+        }
+      } else {
+        console.log('file has no file writer');
+        reject();
+      }
+    });
+
+    /* if (this.fileWriter) {
       try {
         this.fileWriter!.write(new Blob([buffer]));
 
@@ -107,43 +159,129 @@ export default class FilesystemIO extends IO {
       return new Promise((resolve, reject) => {
         reject('no file writer.');
       });
+    } */
+  }
+
+  /**
+   * @param {SavvyFile}File
+   * @param {SavvyFile[]}Files
+   * @public
+   */
+  public download(files: SavvyFile[], asZip: boolean = false): void {
+    console.log('filesystem download');
+    if (asZip) {
+      this.downloadAsZip(files);
+    } else {
+      // normal donwload
+      for (let i: number = 0, l: number = files.length; i < l; i++) {
+        let fileEntry: FileEntry = files[i].fileEntry as FileEntry;
+        if (typeof files[i].fileEntry.file === 'function') {
+          try {
+            fileEntry.file(
+              (file: File) => {
+                this.saveFile(files[i], file);
+              },
+              () => {
+                this.saveLink(files[i]);
+              }
+            );
+          } catch (e) {
+            console.log(e);
+          }
+        } else {
+          this.saveLink(files[i]);
+        }
+      }
     }
   }
 
-  public download(name: string): void {
-    console.log('filesystem download');
+  private async downloadAsZip(files: SavvyFile[]): Promise<undefined> {
+    // create a tmpFile for zip buffer.
+    let tmpZipFile: FileEntry = await this.createTmpFile();
 
-    if (typeof this.fileEntry!.file === 'function') {
+    let totalFileSize: number = files.reduce((prev: number, cur: SavvyFile, curIndex: number, arr: SavvyFile[]) => prev + cur.fileSize, 0);
+
+    // creative a zip writer(a zip writer need a reader to provide data, and a writer to writer zip data to zip file.)
+    let writer: FileWriter = await new Promise((resolve: Function, reject: Function) => {
+      tmpZipFile.createWriter(
+        (fileWriter: FileWriter) => {
+          resolve(fileWriter);
+        },
+        () => {
+          reject();
+        }
+      );
+    });
+
+    let zipWriter: ZipWriter = createZipWriter(writer);
+
+    // add all files into zip writer, and writer to fs://root/tmp.zip
+    for (let i: number = 0, l: number = files.length; i < l; i++) {
+      // get File Obj
+      // TO-DO: stupid thing is, we use Filesystem to store the file but at here we read it to memory again!
+      // WHATEVER SOMETHING MUST BE FOUND TO SOLVE THIS SHIT!
+      let tmpFile: File = await new Promise((resolve: FileCallback, reject: ErrorCallback) => {
+        (files[i].fileEntry as FileEntry).file(resolve, reject);
+      });
+      await zipWriter.add(files[i].name, new BlobReader(tmpFile), files[i].fileSize, totalFileSize, i === l - 1);
+    }
+
+    // download this zip file
+    if (typeof tmpZipFile.file === 'function') {
       try {
-        this.fileEntry!.file(this.saveFile, this.saveLink);
+        tmpZipFile.file(
+          (file: File) => {
+            console.log(file);
+            let _file: File = new File([file], 'tmp.zip', {
+              type: filemime('tmp.zip')
+            });
+
+            this.saveLink(new SavvyFile('', 'tmp.zip', 0, 0, this), window.URL.createObjectURL(_file));
+            // this.saveFile(files[0], file);
+          },
+          () => {
+            this.saveLink(files[0]);
+          }
+        );
       } catch (e) {
         console.log(e);
       }
     } else {
-      this.saveLink();
+      this.saveLink(files[0]);
     }
-  }
 
-  private saveLink = (err?: DOMError, objectURL?: string) => {
+    return;
+  }
+  /**
+   * @param {SavvyFile}file
+   * @param {String?}objectURL
+   * @private
+   */
+  private saveLink = (file: SavvyFile, objectURL?: string) => {
+    console.log(file, objectURL);
     let link: string | false = typeof objectURL === 'string' && objectURL;
     let dlLinkNode: HTMLAnchorElement = document.createElement('a');
 
-    dlLinkNode.download = this.fileName;
-    dlLinkNode.href = link || this.fileEntry!.toURL();
+    dlLinkNode.download = file.name;
+    dlLinkNode.href = link || file.fileEntry.toURL();
 
     dlLinkNode.click();
   };
-
-  private saveFile = (file: File) => {
+  /**
+   * @param {SavvyFile}savvyFile
+   * @param {File}file
+   * @private
+   */
+  private saveFile = (savvyFile: SavvyFile, file: File) => {
     try {
-      let _file: File = new File([file], this.fileName, {
-        type: filemime(this.fileName)
+      let _file: File = new File([file], savvyFile.name, {
+        type: filemime(savvyFile.name)
       });
 
-      this.saveLink(undefined, window.URL.createObjectURL(_file));
+      this.saveLink(savvyFile, window.URL.createObjectURL(_file));
     } catch (ex) {
       console.log(ex);
-      this.saveLink();
+      this.saveLink(savvyFile);
     }
   };
 }

@@ -1217,197 +1217,54 @@ function fileext(name) {
   return uppercase ? ext.toUpperCase() : ext.toLowerCase();
 }
 
-var customWindow = window;
-var TEMPORARY = 0;
-
-var FilesystemIO =
-/*#__PURE__*/
-function (_IO) {
-  inherits(FilesystemIO, _IO);
-
-  // private bufferCache: ArrayBuffer[] = [];
-  function FilesystemIO(fileSize, name, initedCallback) {
-    var _this;
-
-    classCallCheck(this, FilesystemIO);
-
-    _this = possibleConstructorReturn(this, getPrototypeOf(FilesystemIO).call(this));
-    _this.size = void 0;
-    _this.downloadSize = 0;
-    _this.fileName = void 0;
-    _this.fileWriter = null;
-    _this.fileEntry = null;
-    _this.writing = false;
-    _this.writeEndResolve = null;
-    _this.writeEndReject = null;
-
-    _this.handleFileWriteStart = function (event) {
-      console.log(event);
-      _this.writing = true;
-    };
-
-    _this.handleFileWriteProgress = function (event) {
-      console.log(event);
-    };
-
-    _this.handleFileWriteError = function (event) {
-      console.log(event);
-      _this.writing = false;
-    };
-
-    _this.handleFileWriteEnd = function (event) {
-      console.log(event);
-      console.log(_this.fileWriter.position);
-      _this.writing = false;
-
-      if (_this.writeEndResolve) {
-        _this.writeEndResolve();
-
-        _this.writeEndReject = null;
-        _this.writeEndResolve = null;
-      }
-    };
-
-    _this.saveLink = function (err, objectURL) {
-      var link = typeof objectURL === 'string' && objectURL;
-      var dlLinkNode = document.createElement('a');
-      dlLinkNode.download = _this.fileName;
-      dlLinkNode.href = link || _this.fileEntry.toURL();
-      dlLinkNode.click();
-    };
-
-    _this.saveFile = function (file) {
-      try {
-        var _file = new File([file], _this.fileName, {
-          type: filemime(_this.fileName)
-        });
-
-        _this.saveLink(undefined, window.URL.createObjectURL(_file));
-      } catch (ex) {
-        console.log(ex);
-
-        _this.saveLink();
-      }
-    };
-
-    _this.size = fileSize;
-    _this.fileName = name;
-    customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem; // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
-    // window.requestFileSystem(type, size, successCallback[, errorCallback]);
-
-    customWindow.requestFileSystem(TEMPORARY, fileSize, function (fs) {
-      fs.root.getDirectory('savvy', {
-        create: true
-      }, function (directoryEntry) {
-        var dirReader = directoryEntry.createReader();
-        dirReader.readEntries(function (entries) {
-          console.log(entries); // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
-
-          /* entries.map((entry: Entry) => {
-            entry.remove(() => {
-              console.log('remove file [' + entry.name + '] from filesystem successful.');
-            });
-          }); */
-        });
-        fs.root.getFile('savvy/' + _this.fileName, {
-          create: true
-        }, function (fileEntry) {
-          _this.fileEntry = fileEntry;
-          fileEntry.createWriter(function (fw) {
-            _this.fileWriter = fw;
-            _this.fileWriter.onwritestart = _this.handleFileWriteStart;
-            _this.fileWriter.onprogress = _this.handleFileWriteProgress;
-            _this.fileWriter.onerror = _this.handleFileWriteError;
-            _this.fileWriter.onwriteend = _this.handleFileWriteEnd;
-            initedCallback && initedCallback();
-          });
-        });
-      });
-    });
-    return _this;
-  }
-
-  createClass(FilesystemIO, [{
-    key: "free_space",
-    // Try to free space before starting the download.
-    // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
-    value: function free_space(callback, ms, delta) {}
-  }, {
-    key: "write",
-    value: function write(buffer) {
-      var _this2 = this;
-
-      console.log('filesystem write'); // has requested fs and get a file writer...
-
-      if (this.fileWriter) {
-        try {
-          this.fileWriter.write(new Blob([buffer]));
-          return new Promise(function (resolve, reject) {
-            _this2.writeEndResolve = resolve;
-            _this2.writeEndReject = reject;
-          });
-        } catch (e) {
-          console.log(e);
-          return new Promise(function (resolve, reject) {
-            reject(e);
-          });
-        }
-      } else {
-        return new Promise(function (resolve, reject) {
-          reject('no file writer.');
-        });
-      }
-    }
-  }, {
-    key: "download",
-    value: function download(name) {
-      console.log('filesystem download');
-
-      if (typeof this.fileEntry.file === 'function') {
-        try {
-          this.fileEntry.file(this.saveFile, this.saveLink);
-        } catch (e) {
-          console.log(e);
-        }
-      } else {
-        this.saveLink();
-      }
-    }
-  }]);
-
-  return FilesystemIO;
-}(IO);
-
 var SavvyFile =
 /*#__PURE__*/
 function () {
-  function SavvyFile(path, name, fileSize, chunkSize, IOMethod, initedCallback) {
+  function SavvyFile(path, name, fileSize, chunkSize, IO_instance) {
+    var _this = this;
+
     classCallCheck(this, SavvyFile);
 
     this.chunklist = [];
     this.status = void 0;
     this.filePath = void 0;
     this.name = void 0;
+    this.fileSize = void 0;
+    this.chunkSize = void 0;
+    this.fileWriter = void 0;
+    this.fileEntry = void 0;
     this.nowChunkIndex = 0;
     this.IO = void 0;
+
+    this.init = function () {
+      return new Promise(function (resolve, reject) {
+        _this.IO.getFileWriter(_this, function (result) {
+          _this.fileWriter = result.fileWriter;
+          _this.fileEntry = result.fileEntry;
+          _this.status = 'inited';
+          resolve();
+        }, reject);
+      });
+    };
+
     this.status = 'initializing';
     this.filePath = path;
     this.name = name;
+    this.fileSize = fileSize;
+    this.chunkSize = chunkSize;
+    this.IO = IO_instance;
     var tmpStart = 0,
         tmpEnd = 0;
 
-    while (tmpEnd < fileSize) {
-      tmpEnd = tmpStart + chunkSize;
-      tmpEnd = tmpEnd > fileSize ? fileSize : tmpEnd;
+    while (tmpEnd < this.fileSize) {
+      tmpEnd = tmpStart + this.chunkSize;
+      tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
       this.chunklist.push({
         start: tmpStart,
         end: tmpEnd
       });
       tmpStart = tmpEnd + 1;
     }
-
-    this.status = 'inited';
-    this.IO = new IOMethod(fileSize, name, initedCallback);
   }
 
   createClass(SavvyFile, [{
@@ -1421,30 +1278,440 @@ function () {
       console.log(this.chunklist, this.nowChunkIndex);
       return this.chunklist[this.nowChunkIndex++];
     }
-  }, {
-    key: "write",
+  }]);
+
+  return SavvyFile;
+}();
+
+/* export default class Crc32 {
+  private crc: number = -1;
+  // Uint32Array is actually slower than []
+  static table: any[] = getCrcTable();
+  public append(data: any) {
+    var crc = this.crc | 0,
+      table = Crc32.table;
+    for (var offset = 0, len = data.length | 0; offset < len; offset++) crc = (crc >>> 8) ^ table[(crc ^ data[offset]) & 0xff];
+    this.crc = crc;
+  }
+  public get() {
+    return ~this.crc;
+  }
+}
+
+function getCrcTable() {
+  var i,
+    j,
+    t,
+    table = [];
+  for (i = 0; i < 256; i++) {
+    t = i;
+    for (j = 0; j < 8; j++) {
+      if (t & 1) {
+        t = (t >>> 1) ^ 0xedb88320;
+      } else {
+        t = t >>> 1;
+      }
+    }
+
+    table[i] = t;
+  }
+
+  return table;
+}
+ */
+// crc32
+var crc32table = [0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2, 0xf3b97148, 0x84be41de, 0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7, 0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec, 0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5, 0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172, 0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b, 0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940, 0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59, 0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116, 0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f, 0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924, 0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d, 0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a, 0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433, 0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818, 0x7f6a0dbb, 0x086d3d2d, 0x91646c97, 0xe6635c01, 0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e, 0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457, 0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c, 0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65, 0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2, 0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb, 0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0, 0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9, 0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086, 0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f, 0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4, 0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad, 0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a, 0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683, 0xe3630b12, 0x94643b84, 0x0d6d6a3e, 0x7a6a5aa8, 0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1, 0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe, 0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7, 0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc, 0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5, 0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252, 0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b, 0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60, 0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79, 0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236, 0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f, 0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04, 0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d, 0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a, 0x9c0906a9, 0xeb0e363f, 0x72076785, 0x05005713, 0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38, 0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21, 0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e, 0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777, 0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c, 0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45, 0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2, 0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db, 0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0, 0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9, 0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6, 0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf, 0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94, 0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d];
+function crc32(data, crc, len) {
+  if (typeof crc === 'undefined') {
+    crc = 0;
+  }
+
+  if (typeof len === 'undefined') {
+    len = data.length;
+  }
+
+  var x = 0;
+  var y = 0;
+  var off = data.length - len;
+  crc = crc ^ -1;
+
+  for (var i = 0; i < len; i++) {
+    y = (crc ^ data[i + off]) & 0xff;
+    x = crc32table[y];
+    crc = crc >>> 8 ^ x;
+  }
+
+  return crc ^ -1;
+}
+
+//     Int64.js
+var VAL32 = 0x100000000; // Map for converting hex octets to strings
+
+var _HEX = [];
+
+for (var i = 0; i < 256; i++) {
+  _HEX[i] = (i > 0xf ? '' : '0') + i.toString(16);
+}
+
+var hasBuffer = typeof Buffer !== 'undefined'; //
+// Int64
+//
+
+/**
+ * Constructor accepts any of the following argument types:
+ *
+ * new Int64(buffer[, offset=0]) - Existing Buffer with byte offset
+ * new Int64(Uint8Array[, offset=0]) - Existing Uint8Array with a byte offset
+ * new Int64(string)             - Hex string (throws if n is outside int64 range)
+ * new Int64(number)             - Number (throws if n is outside int64 range)
+ * new Int64(hi, lo)             - Raw bits as two 32-bit values
+ */
+
+var Int64 = function Int64(a1, a2) {
+  var asIs = hasBuffer ? a1 instanceof Buffer : a1 instanceof Uint8Array;
+
+  if (asIs) {
+    this.buffer = a1;
+    this.offset = a2 || 0;
+  } else if (Object.prototype.toString.call(a1) == '[object Uint8Array]') {
+    // Under Browserify, Buffers can extend Uint8Arrays rather than an
+    // instance of Buffer. We could assume the passed in Uint8Array is actually
+    // a buffer but that won't handle the case where a raw Uint8Array is passed
+    // in. We construct a new Buffer just in case.
+    this.buffer = new Buffer(a1);
+    this.offset = a2 || 0;
+  } else {
+    this.buffer = this.buffer || (hasBuffer ? new Buffer(8) : new Uint8Array(8));
+    this.offset = 0;
+    this.setValue.apply(this, arguments);
+  }
+}; // Max integer value that JS can accurately represent
+
+
+Int64.MAX_INT = Math.pow(2, 53); // Min integer value that JS can accurately represent
+
+Int64.MIN_INT = -Math.pow(2, 53);
+Int64.prototype = {
+  constructor: Int64,
+
+  /**
+   * Do in-place 2's compliment.  See
+   * http://en.wikipedia.org/wiki/Two's_complement
+   */
+  _2scomp: function _2scomp() {
+    var b = this.buffer,
+        o = this.offset,
+        carry = 1;
+
+    for (var i = o + 7; i >= o; i--) {
+      var v = (b[i] ^ 0xff) + carry;
+      b[i] = v & 0xff;
+      carry = v >> 8;
+    }
+  },
+
+  /**
+   * Set the value. Takes any of the following arguments:
+   *
+   * setValue(string) - A hexidecimal string
+   * setValue(number) - Number (throws if n is outside int64 range)
+   * setValue(hi, lo) - Raw bits as two 32-bit values
+   */
+  setValue: function setValue(hi, lo) {
+    var negate = false;
+
+    if (arguments.length == 1) {
+      if (typeof hi == 'number') {
+        // Simplify bitfield retrieval by using abs() value.  We restore sign
+        // later
+        negate = hi < 0;
+        hi = Math.abs(hi);
+        lo = hi % VAL32;
+        hi = hi / VAL32;
+        if (hi > VAL32) throw new RangeError(hi + ' is outside Int64 range');
+        hi = hi | 0;
+      } else if (typeof hi == 'string') {
+        hi = (hi + '').replace(/^0x/, '');
+        lo = hi.substr(-8);
+        hi = hi.length > 8 ? hi.substr(0, hi.length - 8) : '';
+        hi = parseInt(hi, 16);
+        lo = parseInt(lo, 16);
+      } else {
+        throw new Error(hi + ' must be a Number or String');
+      }
+    } // Technically we should throw if hi or lo is outside int32 range here, but
+    // it's not worth the effort. Anything past the 32'nd bit is ignored.
+    // Copy bytes to buffer
+
+
+    var b = this.buffer,
+        o = this.offset;
+
+    for (var i = 7; i >= 0; i--) {
+      b[o + i] = lo & 0xff;
+      lo = i == 4 ? hi : lo >>> 8;
+    } // Restore sign of passed argument
+
+
+    if (negate) this._2scomp();
+  },
+
+  /**
+   * Convert to a native JS number.
+   *
+   * WARNING: Do not expect this value to be accurate to integer precision for
+   * large (positive or negative) numbers!
+   *
+   * @param allowImprecise If true, no check is performed to verify the
+   * returned value is accurate to integer precision.  If false, imprecise
+   * numbers (very large positive or negative numbers) will be forced to +/-
+   * Infinity.
+   */
+  toNumber: function toNumber(allowImprecise) {
+    var b = this.buffer,
+        o = this.offset; // Running sum of octets, doing a 2's complement
+
+    var negate = b[o] & 0x80,
+        x = 0,
+        carry = 1;
+
+    for (var i = 7, m = 1; i >= 0; i--, m *= 256) {
+      var v = b[o + i]; // 2's complement for negative numbers
+
+      if (negate) {
+        v = (v ^ 0xff) + carry;
+        carry = v >> 8;
+        v = v & 0xff;
+      }
+
+      x += v * m;
+    } // Return Infinity if we've lost integer precision
+
+
+    if (!allowImprecise && x >= Int64.MAX_INT) {
+      return negate ? -Infinity : Infinity;
+    }
+
+    return negate ? -x : x;
+  },
+
+  /**
+   * Convert to a JS Number. Returns +/-Infinity for values that can't be
+   * represented to integer precision.
+   */
+  valueOf: function valueOf() {
+    return this.toNumber(false);
+  },
+
+  /**
+   * Return string value
+   *
+   * @param radix Just like Number#toString()'s radix
+   */
+  toString: function toString(radix) {
+    return this.valueOf().toString(radix || 10);
+  },
+
+  /**
+   * Return a string showing the buffer octets, with MSB on the left.
+   *
+   * @param sep separator string. default is '' (empty string)
+   */
+  toOctetString: function toOctetString(sep) {
+    var out = new Array(8);
+    var b = this.buffer,
+        o = this.offset;
+
+    for (var i = 0; i < 8; i++) {
+      out[i] = _HEX[b[o + i]];
+    }
+
+    return out.join(sep || '');
+  },
+
+  /**
+   * Returns the int64's 8 bytes in a buffer.
+   *
+   * @param {bool} [rawBuffer=false]  If no offset and this is true, return the internal buffer.  Should only be used if
+   *                                  you're discarding the Int64 afterwards, as it breaks encapsulation.
+   */
+  toBuffer: function toBuffer(rawBuffer) {
+    if (rawBuffer && this.offset === 0) return this.buffer;
+    var out = new Buffer(8);
+    this.buffer.copy(out, 0, this.offset, this.offset + 8);
+    return out;
+  },
+
+  /**
+   * Copy 8 bytes of int64 into target buffer at target offset.
+   *
+   * @param {Buffer} targetBuffer       Buffer to copy into.
+   * @param {number} [targetOffset=0]   Offset into target buffer.
+   */
+  copy: function copy(targetBuffer, targetOffset) {
+    this.buffer.copy(targetBuffer, targetOffset || 0, this.offset, this.offset + 8);
+  },
+
+  /**
+   * Returns a number indicating whether this comes before or after or is the
+   * same as the other in sort order.
+   *
+   * @param {Int64} other  Other Int64 to compare.
+   */
+  compare: function compare(other) {
+    // If sign bits differ ...
+    if ((this.buffer[this.offset] & 0x80) != (other.buffer[other.offset] & 0x80)) {
+      return other.buffer[other.offset] - this.buffer[this.offset];
+    } // otherwise, compare bytes lexicographically
+
+
+    for (var i = 0; i < 8; i++) {
+      if (this.buffer[this.offset + i] !== other.buffer[other.offset + i]) {
+        return this.buffer[this.offset + i] - other.buffer[other.offset + i];
+      }
+    }
+
+    return 0;
+  },
+
+  /**
+   * Returns a boolean indicating if this integer is equal to other.
+   *
+   * @param {Int64} other  Other Int64 to compare.
+   */
+  equals: function equals(other) {
+    return this.compare(other) === 0;
+  },
+
+  /**
+   * Pretty output in console.log
+   */
+  inspect: function inspect() {
+    return '[Int64 value:' + this + ' octets:' + this.toOctetString(' ') + ']';
+  }
+};
+
+var appendABViewSupported = false;
+
+try {
+  appendABViewSupported = new Blob([new DataView(new ArrayBuffer(0))]).size === 0;
+} catch (e) {
+  console.log(e);
+}
+var ZipWriter =
+/*#__PURE__*/
+function () {
+  function ZipWriter(writer) {
+    classCallCheck(this, ZipWriter);
+
+    this.writer = void 0;
+    this.fileNames = [];
+    this.files = {};
+    this.dataLength = 0;
+    this.offset = 0;
+    this.dirData = [];
+    this.writer = writer;
+  }
+
+  createClass(ZipWriter, [{
+    key: "add",
     value: function () {
-      var _write = asyncToGenerator(
+      var _add = asyncToGenerator(
       /*#__PURE__*/
-      regenerator.mark(function _callee(response) {
-        var buffer;
+      regenerator.mark(function _callee(name, reader, fileSize, totalSize, isLast) {
+        var _this = this;
+
+        var buffer, crc, ziper, fileName, ebuf, header, centralDir, centralDirBuffer, end, tmpSize, tmpOffset, tmpBuf, i, _i, d, _d;
+
         return regenerator.wrap(function _callee$(_context) {
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
                 _context.next = 2;
-                return response.arrayBuffer();
+                return reader.readUint8Array();
 
               case 2:
                 buffer = _context.sent;
-                _context.next = 5;
-                return this.IO.write(buffer);
+                crc = crc32(buffer, 0, buffer.byteLength);
+                ziper = new ZIPClass(totalSize); // begin set header
 
-              case 5:
-                console.log('file write complete');
-                return _context.abrupt("return");
+                fileName = unescape(encodeURIComponent(name));
+                ebuf = ezBuffer(1 + 4 + 4 + fileName.length);
+                ebuf.i16(zipUtf8ExtraId);
+                ebuf.i16(5 + fileName.length); // size
 
-              case 7:
+                ebuf.i8(1); // version
+
+                ebuf.i32(crc32(fileName));
+                ebuf.appendBytes(fileName);
+                header = ziper.ZipHeader(fileName, fileSize
+                /* TO-DO: add file date */
+                , ebuf.getArray());
+                console.log('add header'); // var d = new Uint8Array(header.byteLength + buffer.byteLength);
+                // d.set(header, 0);
+                // d.set(buffer, header.byteLength);
+                // buffer = d;
+                // set header complete...
+                // begin set central directory
+
+                centralDir = ziper.ZipCentralDirectory(fileName, fileSize, fileSize, crc, false, this.offset);
+                this.dirData.push(centralDir.dirRecord);
+                centralDirBuffer = centralDir.dataDescriptor;
+                console.log('add central directory');
+
+                if (isLast) {
+                  end = ziper.ZipSuffix(this.offset + buffer.byteLength + header.byteLength + centralDirBuffer.byteLength, this.dirData);
+                  console.log('this file is the last to be added to this zip, add end.');
+                  tmpSize = 0, tmpOffset = centralDirBuffer.byteLength;
+
+                  for (i in this.dirData) {
+                    tmpSize += this.dirData[i].byteLength;
+                  }
+
+                  tmpBuf = new Uint8Array(centralDirBuffer.byteLength + tmpSize + end.byteLength);
+                  tmpBuf.set(centralDirBuffer, 0);
+
+                  for (_i in this.dirData) {
+                    // console.log(this.dirData[i], tmpOffset);
+                    tmpBuf.set(this.dirData[_i], tmpOffset);
+                    tmpOffset += this.dirData[_i].byteLength;
+                  }
+
+                  tmpBuf.set(end, tmpOffset);
+                  d = new Uint8Array(header.byteLength + buffer.byteLength + tmpBuf.byteLength);
+                  d.set(header, 0);
+                  d.set(buffer, header.byteLength);
+                  d.set(tmpBuf, header.byteLength + buffer.byteLength);
+                  buffer = d;
+                } else {
+                  _d = new Uint8Array(header.byteLength + buffer.byteLength + centralDirBuffer.byteLength);
+
+                  _d.set(header, 0);
+
+                  _d.set(buffer, header.byteLength);
+
+                  _d.set(centralDirBuffer, header.byteLength + buffer.byteLength);
+
+                  buffer = _d;
+                }
+
+                this.offset += buffer.byteLength;
+                console.log('get a finalliy buffer, length: ' + buffer.byteLength);
+                return _context.abrupt("return", new Promise(function (resolve, reject) {
+                  var tmpWrite = _this.writer;
+
+                  tmpWrite.onwriteend = function (e) {
+                    resolve();
+                  };
+
+                  tmpWrite.onerror = function () {
+                    reject();
+                  };
+
+                  tmpWrite.write(new Blob([buffer]));
+                }));
+
+              case 22:
               case "end":
                 return _context.stop();
             }
@@ -1452,23 +1719,800 @@ function () {
         }, _callee, this);
       }));
 
-      function write(_x) {
-        return _write.apply(this, arguments);
+      function add(_x, _x2, _x3, _x4, _x5) {
+        return _add.apply(this, arguments);
       }
 
-      return write;
+      return add;
     }()
-  }, {
-    key: "download",
-    value: function download() {
-      this.status = 'downloading';
-      this.IO.download(this.name);
-      this.status = 'complete';
+    /* private writeHeader(name: string, fileName: number[]): Promise<any> {
+      let data: { buffer: ArrayBuffer; array: Uint8Array; view: DataView };
+      let date: Date = new Date();
+      let header = getDataHelper(26);
+      this.files[name] = {
+        headerArray: header.array,
+        directory: false,
+        filename: fileName,
+        offset: this.dataLength,
+        comment: getBytes(encodeUTF8(''))
+      };
+      header.view.setUint32(0, 0x14000808);
+      header.view.setUint16(6, (((date.getHours() << 6) | date.getMinutes()) << 5) | (date.getSeconds() / 2), true);
+      header.view.setUint16(8, ((((date.getFullYear() - 1980) << 4) | (date.getMonth() + 1)) << 5) | date.getDate(), true);
+      header.view.setUint16(22, fileName.length, true);
+      data = getDataHelper(30 + fileName.length);
+      data.view.setUint32(0, 0x504b0304);
+      data.array.set(header.array, 4);
+      data.array.set(fileName, 30);
+      this.dataLength += data.array.length;
+       return new Promise((resolve: Function, reject: Function) => {
+        let tmpWrite: FileWriter = this.writer;
+        tmpWrite.onwriteend = (e: ProgressEvent) => {
+          resolve(header);
+        };
+        tmpWrite.onerror = () => {
+          reject();
+        };
+        tmpWrite.write(new Blob([appendABViewSupported ? data.array : data.array.buffer]));
+      });
+      // this.writer.writeUint8Array(data.array, callback, onwriteerror);
+    } 
+    private writeFooter(compressedLength: number, crc32: number, reader: BlobReader, header: THeadAndFooter): Promise<any> {
+      var footer: THeadAndFooter = getDataHelper(16);
+      this.dataLength += compressedLength || 0;
+      footer.view.setUint32(0, 0x504b0708);
+      if (typeof crc32 != 'undefined') {
+        header.view.setUint32(10, crc32, true);
+        footer.view.setUint32(4, crc32, true);
+      }
+      if (reader) {
+        footer.view.setUint32(8, compressedLength, true);
+        header.view.setUint32(14, compressedLength, true);
+        footer.view.setUint32(12, reader.size, true);
+        header.view.setUint32(18, reader.size, true);
+      }
+       return new Promise((resolve: Function, reject: Function) => {
+        let tmpWrite: FileWriter = this.writer;
+        tmpWrite.onwriteend = (e: ProgressEvent) => {
+          resolve();
+        };
+        tmpWrite.onerror = () => {
+          reject();
+        };
+        tmpWrite.write(new Blob([appendABViewSupported ? footer.array : footer.array.buffer]));
+      });
+    }
+     private async copy(reader: BlobReader, offset: number, size: number, computeCrc32: boolean): Promise<number> {
+      let chunkIndex = 0,
+        index,
+        outputSize = 0,
+        crcInput: boolean = true;
+      let crc = new Crc32();
+       // let outputData;
+      // index = chunkIndex * CHUNK_SIZE;
+      // if (index < size) {
+      //   let inputData = await reader.readUint8Array(offset + index, Math.min(CHUNK_SIZE, size - index));
+       //   if(inputData){
+      //     outputSize += inputData.length;
+      //     await this.writer.writeUint8Array()
+      //   }
+      // } else {
+      // }
+      // get all content once.
+      let inputData: Uint8Array = await reader.readUint8Array();
+      crc.append(inputData);
+      await new Promise((resolve: Function, reject: Function) => {
+        let tmpWrite: FileWriter = this.writer;
+        tmpWrite.onwriteend = (e: ProgressEvent) => {
+          resolve();
+        };
+        tmpWrite.onerror = () => {
+          reject();
+        };
+        tmpWrite.write(new Blob([appendABViewSupported ? inputData : inputData.buffer]));
+      });
+       return crc.get();
+    } */
+
+  }]);
+
+  return ZipWriter;
+}();
+var BlobReader =
+/*#__PURE__*/
+function () {
+  function BlobReader(_file) {
+    classCallCheck(this, BlobReader);
+
+    this.file = void 0;
+    this.size = void 0;
+    this.file = _file;
+    this.size = _file.size;
+  }
+
+  createClass(BlobReader, [{
+    key: "readUint8Array",
+    value: function readUint8Array() {
+      var _this2 = this;
+
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader(); // TO-DO: may be wrong
+
+        reader.onload = function (e) {
+          resolve(new Uint8Array(reader.result));
+        };
+
+        reader.onerror = function () {
+          reject();
+        };
+
+        try {
+          reader.readAsArrayBuffer(_this2.file);
+        } catch (e) {
+          reject();
+        }
+      });
     }
   }]);
 
-  return SavvyFile;
+  return BlobReader;
 }();
+function createZipWriter(writer) {
+  return new ZipWriter(writer);
+}
+var fileHeaderLen = 30;
+var noCompression = 0;
+var defaultFlags = 0x808;
+/* UTF-8 */
+
+var i32max = 0xffffffff;
+var i16max = 0xffff;
+var zip64ExtraId = 0x0001;
+var zipUtf8ExtraId = 0x7075;
+var directory64LocLen = 20;
+var directory64EndLen = 56;
+var fileHeaderSignature = 0x04034b50;
+var directory64LocSignature = 0x07064b50;
+var directory64EndSignature = 0x06064b50;
+var directoryEndSignature = 0x06054b50;
+var dataDescriptorSignature = 0x08074b50; // de-facto standard; required by OS X Finder
+
+var directoryHeaderSignature = 0x02014b50;
+var dataDescriptorLen = 16;
+var dataDescriptor64Len = 24;
+var directoryHeaderLen = 46;
+
+var ZIPClass =
+/*#__PURE__*/
+function () {
+  function ZIPClass(totalSize) {
+    classCallCheck(this, ZIPClass);
+
+    this.maxZipSize = Math.pow(2, 31) * 0.9;
+    this.isZip64 = false;
+    this.zipVersion = 20;
+    this.isZip64 = totalSize > this.maxZipSize || localStorage.zip64 === 1;
+    this.zipVersion = this.isZip64 ? 45 : 20;
+  }
+
+  createClass(ZIPClass, [{
+    key: "ZipHeader",
+    value: function ZipHeader(fileName, fileSize, extra) {
+      var readerVersion = this.zipVersion,
+          Flags = defaultFlags,
+          Method = noCompression,
+          date = 0,
+          crc32 = 0,
+          unsize = 0;
+      var buf = ezBuffer(fileHeaderLen + fileName.length + extra.length);
+      buf.i32(fileHeaderSignature);
+      buf.i16(readerVersion);
+      buf.i16(Flags);
+      buf.i16(Method);
+      DosDateTime(date, buf);
+      buf.i32(crc32); // crc32
+
+      buf.i32(fileSize); // compress size
+
+      buf.i32(unsize); // uncompress size
+
+      buf.i16(fileName.length);
+      buf.i16(extra.length);
+      buf.appendBytes(fileName);
+      buf.appendBytes(extra);
+      return buf.getBytes();
+    }
+    /**
+     * @param {number} size compressed size
+     * @param {number} unsize uncompress size
+     * @param {number} crc32
+     * @param {boolean} directory
+     * @param {number} headerpos header position
+     */
+
+  }, {
+    key: "ZipCentralDirectory",
+    value: function ZipCentralDirectory(filename, size, unsize, crc32, directory, headerpos) {
+      var creatorVersion = this.zipVersion;
+      var readerVersion = this.zipVersion;
+      var Flags = defaultFlags;
+      var Method = noCompression;
+      var date = 0;
+      var externalAttr = directory ? 1 : 0;
+      var extra = [],
+          ebuf;
+
+      if (this.isZip64) {
+        ebuf = ezBuffer(28); // 2xi16 + 3xi64
+
+        ebuf.i16(zip64ExtraId);
+        ebuf.i16(24);
+        ebuf.i64(size);
+        ebuf.i64(unsize);
+        ebuf.i64(headerpos);
+        extra = extra.concat(ebuf.getArray());
+      }
+
+      var centralDirectoryBuf = ezBuffer(directoryHeaderLen + filename.length + extra.length);
+      centralDirectoryBuf.i32(directoryHeaderSignature);
+      centralDirectoryBuf.i16(creatorVersion);
+      centralDirectoryBuf.i16(readerVersion);
+      centralDirectoryBuf.i16(Flags);
+      centralDirectoryBuf.i16(Method);
+      DosDateTime(date, centralDirectoryBuf);
+      centralDirectoryBuf.i32(crc32);
+      centralDirectoryBuf.i32(this.isZip64 ? i32max : size);
+      centralDirectoryBuf.i32(this.isZip64 ? i32max : unsize);
+      centralDirectoryBuf.i16(filename.length);
+      centralDirectoryBuf.i16(extra.length);
+      centralDirectoryBuf.i16(0); // no comments
+
+      centralDirectoryBuf.i32(0); // disk number
+
+      centralDirectoryBuf.i32(externalAttr);
+      centralDirectoryBuf.i32(this.isZip64 ? i32max : headerpos);
+      centralDirectoryBuf.appendBytes(filename);
+      centralDirectoryBuf.appendBytes(extra);
+      var dataDescriptorBuf = ezBuffer(this.isZip64 ? dataDescriptor64Len : dataDescriptorLen);
+      dataDescriptorBuf.i32(dataDescriptorSignature);
+      dataDescriptorBuf.i32(crc32);
+
+      if (this.isZip64) {
+        dataDescriptorBuf.i64(size);
+        dataDescriptorBuf.i64(unsize);
+      } else {
+        dataDescriptorBuf.i32(size);
+        dataDescriptorBuf.i32(unsize);
+      }
+
+      return {
+        dirRecord: centralDirectoryBuf.getBytes(),
+        dataDescriptor: dataDescriptorBuf.getBytes()
+      };
+    }
+  }, {
+    key: "ZipSuffix",
+    value: function ZipSuffix(pos, dirData) {
+      var dirDatalength = 0;
+
+      for (var i in dirData) {
+        dirDatalength += dirData[i].length;
+      }
+
+      var buf = ezBuffer(22);
+
+      if (this.isZip64) {
+        var xbuf = ezBuffer(directory64EndLen + directory64LocLen);
+        xbuf.i32(directory64EndSignature); // directory64EndLen - 4 bytes - 8 bytes
+
+        xbuf.i64(directory64EndLen - 4 - 8);
+        xbuf.i16(this.zipVersion);
+        xbuf.i16(this.zipVersion);
+        xbuf.i32(0); // disk number
+
+        xbuf.i32(0); // number of the disk with the start of the central directory
+
+        xbuf.i64(dirData.length);
+        xbuf.i64(dirData.length);
+        xbuf.i64(dirDatalength);
+        xbuf.i64(pos);
+        xbuf.i32(directory64LocSignature);
+        xbuf.i32(0);
+        xbuf.i64(pos + dirDatalength);
+        xbuf.i32(1); // total number of disks
+
+        buf.resize(22 + xbuf.getBytes().length);
+        buf.appendBytes(xbuf.getBytes());
+      }
+
+      buf.i32(directoryEndSignature);
+      buf.i32(0); // skip
+
+      buf.i16(this.isZip64 ? i16max : dirData.length);
+      buf.i16(this.isZip64 ? i16max : dirData.length);
+      buf.i32(this.isZip64 ? i32max : dirDatalength);
+      buf.i32(this.isZip64 ? i32max : pos);
+      buf.i16(0); // no comments
+
+      return buf.getBytes();
+    }
+  }]);
+
+  return ZIPClass;
+}();
+
+function ezBuffer(size) {
+  var obj = new Uint8Array(size),
+      buffer = new DataView(obj.buffer),
+      offset = 0;
+  return {
+    debug: function debug() {
+      console.error(['DEBUG', offset, obj.length]);
+    },
+    getArray: function getArray() {
+      var bytes = [];
+      obj.map(function (val, i, array) {
+        bytes.push(val);
+        return val;
+      });
+      return bytes;
+    },
+    getBytes: function getBytes() {
+      return obj;
+    },
+    appendBytes: function appendBytes(text) {
+      var isArray = typeof text != 'string';
+
+      for (var i = text.length; i--;) {
+        if (isArray) {
+          obj[offset + i] = text[i];
+        } else {
+          // We assume it is an string
+          obj[offset + i] = text.charCodeAt(i);
+        }
+      }
+
+      offset += text.length;
+    },
+    i64: function i64(number, bigendian) {
+      var buffer = new Int64(number).buffer;
+
+      if (!bigendian) {
+        // swap the by orders
+        var nbuffer = new Uint8Array(buffer.length),
+            len = buffer.length - 1;
+
+        for (var i = len; i >= 0; i--) {
+          nbuffer[i] = buffer[len - i];
+        }
+
+        buffer = nbuffer;
+      } // append the buffer
+
+
+      this.appendBytes(buffer);
+    },
+    i32: function i32(number, bigendian) {
+      buffer.setInt32(offset, number, !bigendian);
+      offset += 4;
+    },
+    i16: function i16(number, bigendian) {
+      buffer.setInt16(offset, number, !bigendian);
+      offset += 2;
+    },
+    i8: function i8(number, bigendian) {
+      buffer.setInt8(offset, number);
+      offset += 1;
+    },
+    resize: function resize(newsize) {
+      var zobj = new Uint8Array(newsize);
+      zobj.set(obj, 0);
+      obj = zobj;
+      buffer = new DataView(obj.buffer);
+      return obj;
+    },
+
+    /**
+     *  Check if the current bytestream has enough
+     *  size to add "size" more bytes. If it doesn't have
+     *  we return a new bytestream object
+     */
+    resizeIfNeeded: function resizeIfNeeded(size) {
+      if (obj.length < size + offset) {
+        return this.resize(size + offset);
+      }
+
+      return obj;
+    }
+  };
+}
+/**
+ *  Set an unix time (or now if missing) in the zip
+ *  expected format
+ */
+
+
+function DosDateTime(sec, buf) {
+  var date = new Date(),
+      dosTime,
+      dosDate;
+
+  if (sec) {
+    date = new Date(sec * 1000);
+  }
+
+  dosTime = date.getHours();
+  dosTime = dosTime << 6;
+  dosTime = dosTime | date.getMinutes();
+  dosTime = dosTime << 5;
+  dosTime = dosTime | date.getSeconds() / 2;
+  dosDate = date.getFullYear() - 1980;
+  dosDate = dosDate << 4;
+  dosDate = dosDate | date.getMonth() + 1;
+  dosDate = dosDate << 5;
+  dosDate = dosDate | date.getDate();
+  buf.i16(dosTime);
+  buf.i16(dosDate);
+}
+
+var customWindow = window;
+var TEMPORARY = 0;
+
+var FilesystemIO =
+/*#__PURE__*/
+function (_IO) {
+  inherits(FilesystemIO, _IO);
+
+  function FilesystemIO() {
+    var _this;
+
+    classCallCheck(this, FilesystemIO);
+
+    _this = possibleConstructorReturn(this, getPrototypeOf(FilesystemIO).call(this));
+
+    _this.saveLink = function (file, objectURL) {
+      console.log(file, objectURL);
+      var link = typeof objectURL === 'string' && objectURL;
+      var dlLinkNode = document.createElement('a');
+      dlLinkNode.download = file.name;
+      dlLinkNode.href = link || file.fileEntry.toURL();
+      dlLinkNode.click();
+    };
+
+    _this.saveFile = function (savvyFile, file) {
+      try {
+        var _file = new File([file], savvyFile.name, {
+          type: filemime(savvyFile.name)
+        });
+
+        _this.saveLink(savvyFile, window.URL.createObjectURL(_file));
+      } catch (ex) {
+        console.log(ex);
+
+        _this.saveLink(savvyFile);
+      }
+    };
+
+    customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem; // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
+    // window.requestFileSystem(type, size, successCallback[, errorCallback]);
+
+    customWindow.requestFileSystem(TEMPORARY, 0x10000, function (fs) {
+      // free space....
+      fs.root.getDirectory('savvy', {
+        create: true
+      }, function (directoryEntry) {
+        var dirReader = directoryEntry.createReader();
+        dirReader.readEntries(function (entries) {
+          console.log(entries); // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
+
+          entries.map(function (entry) {
+            entry.remove(function () {
+              console.log('remove file [' + entry.name + '] from filesystem successful.');
+            });
+          });
+        });
+      });
+    });
+    return _this;
+  }
+  /**
+   * @param {SavvyFile} file
+   * @param {Function} successCallback
+   * @param {Function} errorCallback
+   */
+
+
+  createClass(FilesystemIO, [{
+    key: "getFileWriter",
+    value: function getFileWriter(file, successCallback, errorCallback) {
+      customWindow.requestFileSystem(TEMPORARY, file.fileSize, function (fs) {
+        fs.root.getDirectory('savvy', {
+          create: true
+        }, function (directoryEntry) {
+          fs.root.getFile('savvy/' + file.name, {
+            create: true
+          }, function (fileEntry) {
+            fileEntry.createWriter(function (fw) {
+              successCallback({
+                fileEntry: fileEntry,
+                fileWriter: fw
+              });
+            });
+          });
+        });
+      });
+    }
+    /* private handleFileWriteStart = (event: ProgressEvent): void => {
+      console.log(event);
+       this.writing = true;
+    };
+    private handleFileWriteProgress = (event: ProgressEvent): void => {
+      console.log(event);
+    };
+    private handleFileWriteError = (event: ProgressEvent): void => {
+      console.log(event);
+       this.writing = false;
+    };
+    private handleFileWriteEnd = (event: ProgressEvent): void => {
+      console.log(event);
+      console.log(this.fileWriter!.position);
+      this.writing = false;
+       if (this.writeEndResolve) {
+        this.writeEndResolve();
+         this.writeEndReject = null;
+        this.writeEndResolve = null;
+      }
+    }; */
+    // Try to free space before starting the download.
+    // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
+
+  }, {
+    key: "free_space",
+    value: function free_space(callback, ms, delta) {}
+  }, {
+    key: "createTmpFile",
+    value: function createTmpFile() {
+      var _this2 = this;
+
+      var tmpFileName = 'tmp.zip';
+      return new Promise(function (resolve, reject) {
+        customWindow.requestFileSystem(TEMPORARY, 4 * 1024 * 1024 * 1024, function (fs) {
+          fs.root.getFile(tmpFileName, undefined, function (file) {
+            file.remove(function () {
+              _this2.create(fs, tmpFileName, resolve, reject);
+            }, function () {
+              _this2.create(fs, tmpFileName, resolve, reject);
+            });
+          }, function () {
+            _this2.create(fs, tmpFileName, resolve, reject);
+          });
+        });
+      });
+    }
+  }, {
+    key: "create",
+    value: function create(fs, tmpFileName, resolve, reject) {
+      fs.root.getFile(tmpFileName, {
+        create: true
+      }, function (tmpFile) {
+        resolve(tmpFile);
+      }, function () {
+        reject();
+      });
+    }
+    /**
+     * @param {SavvyFile} file
+     * @param {ArrayBuffer} buffer
+     */
+
+  }, {
+    key: "write",
+    value: function write(file, buffer) {
+      console.log('filesystem write');
+      return new Promise(function (resolve, reject) {
+        if (file.fileWriter) {
+          var fileWriter = file.fileWriter;
+
+          try {
+            fileWriter.onwriteend = function (e) {
+              resolve();
+            };
+
+            fileWriter.write(new Blob([buffer]));
+          } catch (e) {
+            console.log(e);
+            reject();
+          }
+        } else {
+          console.log('file has no file writer');
+          reject();
+        }
+      });
+      /* if (this.fileWriter) {
+        try {
+          this.fileWriter!.write(new Blob([buffer]));
+           return new Promise((resolve, reject) => {
+            this.writeEndResolve = resolve;
+            this.writeEndReject = reject;
+          });
+        } catch (e) {
+          console.log(e);
+           return new Promise((resolve, reject) => {
+            reject(e);
+          });
+        }
+      } else {
+        return new Promise((resolve, reject) => {
+          reject('no file writer.');
+        });
+      } */
+    }
+    /**
+     * @param {SavvyFile}File
+     * @param {SavvyFile[]}Files
+     * @public
+     */
+
+  }, {
+    key: "download",
+    value: function download(files) {
+      var _this3 = this;
+
+      var asZip = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+      console.log('filesystem download');
+
+      if (asZip) {
+        this.downloadAsZip(files);
+      } else {
+        var _loop = function _loop(i, l) {
+          var fileEntry = files[i].fileEntry;
+
+          if (typeof files[i].fileEntry.file === 'function') {
+            try {
+              fileEntry.file(function (file) {
+                _this3.saveFile(files[i], file);
+              }, function () {
+                _this3.saveLink(files[i]);
+              });
+            } catch (e) {
+              console.log(e);
+            }
+          } else {
+            _this3.saveLink(files[i]);
+          }
+        };
+
+        // normal donwload
+        for (var i = 0, l = files.length; i < l; i++) {
+          _loop(i, l);
+        }
+      }
+    }
+  }, {
+    key: "downloadAsZip",
+    value: function () {
+      var _downloadAsZip = asyncToGenerator(
+      /*#__PURE__*/
+      regenerator.mark(function _callee(files) {
+        var _this4 = this;
+
+        var tmpZipFile, totalFileSize, writer, zipWriter, _loop2, i, l;
+
+        return regenerator.wrap(function _callee$(_context2) {
+          while (1) {
+            switch (_context2.prev = _context2.next) {
+              case 0:
+                _context2.next = 2;
+                return this.createTmpFile();
+
+              case 2:
+                tmpZipFile = _context2.sent;
+                totalFileSize = files.reduce(function (prev, cur, curIndex, arr) {
+                  return prev + cur.fileSize;
+                }, 0); // creative a zip writer(a zip writer need a reader to provide data, and a writer to writer zip data to zip file.)
+
+                _context2.next = 6;
+                return new Promise(function (resolve, reject) {
+                  tmpZipFile.createWriter(function (fileWriter) {
+                    resolve(fileWriter);
+                  }, function () {
+                    reject();
+                  });
+                });
+
+              case 6:
+                writer = _context2.sent;
+                zipWriter = createZipWriter(writer); // add all files into zip writer, and writer to fs://root/tmp.zip
+
+                _loop2 =
+                /*#__PURE__*/
+                regenerator.mark(function _loop2(i, l) {
+                  var tmpFile;
+                  return regenerator.wrap(function _loop2$(_context) {
+                    while (1) {
+                      switch (_context.prev = _context.next) {
+                        case 0:
+                          _context.next = 2;
+                          return new Promise(function (resolve, reject) {
+                            files[i].fileEntry.file(resolve, reject);
+                          });
+
+                        case 2:
+                          tmpFile = _context.sent;
+                          _context.next = 5;
+                          return zipWriter.add(files[i].name, new BlobReader(tmpFile), files[i].fileSize, totalFileSize, i === l - 1);
+
+                        case 5:
+                        case "end":
+                          return _context.stop();
+                      }
+                    }
+                  }, _loop2, this);
+                });
+                i = 0, l = files.length;
+
+              case 10:
+                if (!(i < l)) {
+                  _context2.next = 15;
+                  break;
+                }
+
+                return _context2.delegateYield(_loop2(i, l), "t0", 12);
+
+              case 12:
+                i++;
+                _context2.next = 10;
+                break;
+
+              case 15:
+                // download this zip file
+                if (typeof tmpZipFile.file === 'function') {
+                  try {
+                    tmpZipFile.file(function (file) {
+                      console.log(file);
+
+                      var _file = new File([file], 'tmp.zip', {
+                        type: filemime('tmp.zip')
+                      });
+
+                      _this4.saveLink(new SavvyFile('', 'tmp.zip', 0, 0, _this4), window.URL.createObjectURL(_file)); // this.saveFile(files[0], file);
+
+                    }, function () {
+                      _this4.saveLink(files[0]);
+                    });
+                  } catch (e) {
+                    console.log(e);
+                  }
+                } else {
+                  this.saveLink(files[0]);
+                }
+
+                return _context2.abrupt("return");
+
+              case 17:
+              case "end":
+                return _context2.stop();
+            }
+          }
+        }, _callee, this);
+      }));
+
+      function downloadAsZip(_x) {
+        return _downloadAsZip.apply(this, arguments);
+      }
+
+      return downloadAsZip;
+    }()
+    /**
+     * @param {SavvyFile}file
+     * @param {String?}objectURL
+     * @private
+     */
+
+  }]);
+
+  return FilesystemIO;
+}(IO);
 
 var IS64BIT = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(navigator.userAgent);
 
@@ -1480,7 +2524,7 @@ function () {
 
     classCallCheck(this, SavvyTransfer);
 
-    this.IOMethod = void 0;
+    this.IO = void 0;
     this.size = 0;
     this.fileInited = 0;
     this.fileAllAdded = false;
@@ -1488,36 +2532,40 @@ function () {
     this.waitReadyAndDownload = false;
     this.files = [];
 
-    this.handleFileInit = function () {
-      _this.fileInited += 1;
-
-      if (_this.fileAllAdded && _this.fileInited === _this.files.length) {
-        _this.readyForDownload = true;
-
-        if (_this.waitReadyAndDownload) {
-          _this.waitReadyAndDownload = false;
-
-          _this.scheduleDownload();
-        }
-      }
-    };
-
-    this.scheduleDownload = function () {
+    this.scheduleDownload = function (filesForZip) {
       if (_this.readyForDownload) {
         console.log('start download...', _this.files);
 
-        if (_this.files.length > 0) {
-          var nextFile = _this.files.find(function (file) {
-            return file.status === 'inited';
-          }); // 还有等待下载的文件
+        if (filesForZip) {
+          // download all file in filesForZip, and store as a single zip file.
+          if (filesForZip.length > 0) {
+            var nextFile = filesForZip.find(function (file) {
+              return file.status === 'inited';
+            }); // 还有等待下载的文件
+
+            if (nextFile) {
+              _this.fetchData(nextFile);
+            } else {
+              _this.IO.download(filesForZip.filter(function (file) {
+                return file.status === 'chunk_empty';
+              }));
+            }
+          }
+        } else {
+          // normal download, as sperate files.
+          if (_this.files.length > 0) {
+            var _nextFile = _this.files.find(function (file) {
+              return file.status === 'inited';
+            }); // 还有等待下载的文件
 
 
-          if (nextFile) {
-            _this.fetchData(nextFile);
-          } else {
-            _this.downloadFile(_this.files.filter(function (file) {
-              return file.status === 'chunk_empty';
-            }));
+            if (_nextFile) {
+              _this.fetchData(_nextFile);
+            } else {
+              _this.IO.download(_this.files.filter(function (file) {
+                return file.status === 'chunk_empty';
+              }), true);
+            }
           }
         }
       } else {
@@ -1531,7 +2579,7 @@ function () {
       var _ref = asyncToGenerator(
       /*#__PURE__*/
       regenerator.mark(function _callee(file) {
-        var nextChunk, response;
+        var nextChunk, response, buffer;
         return regenerator.wrap(function _callee$(_context) {
           while (1) {
             switch (_context.prev = _context.next) {
@@ -1550,14 +2598,19 @@ function () {
               case 4:
                 response = _context.sent;
                 _context.next = 7;
-                return file.write(response);
+                return response.arrayBuffer();
 
               case 7:
+                buffer = _context.sent;
+                _context.next = 10;
+                return _this.IO.write(file, buffer);
+
+              case 10:
                 _this.scheduleDownload();
 
                 return _context.abrupt("return");
 
-              case 9:
+              case 12:
               case "end":
                 return _context.stop();
             }
@@ -1572,7 +2625,7 @@ function () {
 
     // this.setIOMethod();
     // this.IOMethod = MemoryIO;
-    this.IOMethod = FilesystemIO;
+    this.IO = new FilesystemIO();
   }
 
   createClass(SavvyTransfer, [{
@@ -1621,10 +2674,16 @@ function () {
                 break;
 
               case 10:
-                this.fileAllAdded = true;
+                this.readyForDownload = true;
+
+                if (this.waitReadyAndDownload) {
+                  this.waitReadyAndDownload = false;
+                  this.scheduleDownload();
+                }
+
                 return _context2.abrupt("return", savvyFiles);
 
-              case 12:
+              case 13:
               case "end":
                 return _context2.stop();
             }
@@ -1654,10 +2713,16 @@ function () {
 
               case 2:
                 tmpFile = _context3.sent;
-                this.fileAllAdded = true;
+                this.readyForDownload = true;
+
+                if (this.waitReadyAndDownload) {
+                  this.waitReadyAndDownload = false;
+                  this.scheduleDownload();
+                }
+
                 return _context3.abrupt("return", tmpFile);
 
-              case 5:
+              case 6:
               case "end":
                 return _context3.stop();
             }
@@ -1702,8 +2767,7 @@ function () {
     key: "showFiles",
     value: function showFiles() {
       console.log('show files');
-    } // 如果一次addFile
-
+    }
   }, {
     key: "_addFile",
     value: function () {
@@ -1754,11 +2818,16 @@ function () {
                 } */
                 // create new file
 
-                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IOMethod, this.handleFileInit);
+                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO); // ensure each file get it's writer from IO
+
+                _context5.next = 14;
+                return tmpFile.init();
+
+              case 14:
                 this.files.push(tmpFile);
                 return _context5.abrupt("return", tmpFile);
 
-              case 14:
+              case 16:
               case "end":
                 return _context5.stop();
             }
@@ -1771,14 +2840,8 @@ function () {
       }
 
       return _addFile;
-    }()
-  }, {
-    key: "downloadFile",
-    value: function downloadFile(files) {
-      for (var i = 0, l = files.length; i < l; i++) {
-        files[i].download();
-      }
-    }
+    }() // add file 之后手动调用, 此时如果files还没有准备好, 则设置变量等待.
+
   }, {
     key: "upload",
     value: function upload(name) {
