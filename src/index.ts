@@ -18,18 +18,17 @@ class SavvyTransfer {
 
   public files: SavvyFile[] = [];
   constructor() {
-    // this.setIOMethod();
-    this.IO = new MemoryIO();
+    this.setIOMethod();
+    // this.IO = new MemoryIO();
     // this.IO = new FilesystemIO();
   }
 
   private setIOMethod() {
-    /* if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
-      this.IOMethod = new filesystemIO();
+    if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
+      this.IO = new FilesystemIO();
     } else {
-      this.IOMethod = new memoryIO();
-    } */
-    // this.IOMethod = MemoryIO;
+      this.IO = new MemoryIO();
+    }
   }
 
   public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<SavvyFile[] | SavvyZipFile> {
