@@ -9,7 +9,7 @@ transfer
       {
         path: 'http://localhost:9798/space/creatives/1/31_202_hello-test_ppp.mp4',
         name: '31_202_hello-test_ppp.mp4'
-      },
+      } /*,
       {
         path: 'http://localhost:9798/space/creatives/1/adCreateAndDelete.mp4',
         name: 'adCreateAndDelete.mp4'
@@ -21,14 +21,14 @@ transfer
       {
         path: 'http://localhost:9798/space/creatives/1/[细说PHP].高洛峰.文字版.pdf',
         name: '[细说PHP].高洛峰.文字版.pdf'
-      }
+      } */
     ],
-    true
+    false
   )
   .then(function onfulfilled(zipFile) {
     console.log('file all ready');
     console.log(zipFile);
 
-    transfer.scheduleDownload(zipFile);
+    transfer.scheduleDownload();
   });
 // transfer.scheduleDownload();

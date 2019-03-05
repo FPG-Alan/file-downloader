@@ -19,8 +19,8 @@ class SavvyTransfer {
   public files: SavvyFile[] = [];
   constructor() {
     // this.setIOMethod();
-    // this.IOMethod = MemoryIO;
-    this.IO = new FilesystemIO();
+    this.IO = new MemoryIO();
+    // this.IO = new FilesystemIO();
   }
 
   private setIOMethod() {
@@ -118,7 +118,7 @@ class SavvyTransfer {
         if (fileForZip.status === 'inited') {
           this.fetchData(fileForZip);
         } else {
-          this.IO.download([fileForZip]);
+          this.IO.download([fileForZip] as SavvyZipFile[]);
         }
       } else {
         // normal download, as sperate files.
@@ -153,7 +153,6 @@ class SavvyTransfer {
 
     return;
   };
-
   public upload(name: string): void {
     console.log('upload');
   }
