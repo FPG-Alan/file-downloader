@@ -1,11 +1,12 @@
 import baseConfig from './rollup.config.base';
 import serve from 'rollup-plugin-serve';
 
-import { name } from '../package.json';
+import { name, version, author } from '../package.json';
 
+const banner = `${'/*!\n' + ' * '}${name}.js v${version}\n` + ` * (c) 2018-${new Date().getFullYear()} ${author}\n` + ' * Released under the MIT License.\n' + ' */';
 export default {
   ...baseConfig,
-  output: [
+  /* output: [
     {
       globals: {
         react: 'React',
@@ -15,6 +16,15 @@ export default {
       file: `example/${name}.js`,
       format: 'umd',
       name,
+      sourcemap: true
+    }
+  ], */
+  output: [
+    {
+      file: `dist/${name}.esm.js`,
+      format: 'es',
+      name,
+      banner,
       sourcemap: true
     }
   ],

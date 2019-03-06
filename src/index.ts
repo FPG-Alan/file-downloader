@@ -7,28 +7,21 @@ import SavvyZipFile from './zip_file';
 const IS64BIT: boolean = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(navigator.userAgent);
 class SavvyTransfer {
   static SIZE_LIMIT: number = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
-  static CHUNK_SIZE: number = 1024 * 1024 * 16;
+  static CHUNK_SIZE: number = 1024 * 1024 * 10;
   private IO: FilesystemIO | MemoryIO;
-  private size: number = 0;
+  private progressHandle: Function;
 
-  private fileInited: number = 0;
-  private fileAllAdded: boolean = false;
   private readyForDownload: boolean = false;
   private waitReadyAndDownload: boolean = false;
 
   public files: SavvyFile[] = [];
-  constructor() {
-    this.setIOMethod();
-    // this.IO = new MemoryIO();
-    // this.IO = new FilesystemIO();
-  }
-
-  private setIOMethod() {
+  constructor(onProgress: Function) {
     if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
       this.IO = new FilesystemIO();
     } else {
       this.IO = new MemoryIO();
     }
+    this.progressHandle = onProgress;
   }
 
   public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<SavvyFile[] | SavvyZipFile> {
@@ -45,7 +38,7 @@ class SavvyTransfer {
     if (asZip) {
       // create a zip file
 
-      zipFile = new SavvyZipFile(savvyFiles, 'test.zip', this.IO);
+      zipFile = new SavvyZipFile(savvyFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle);
 
       await zipFile.init();
     }
@@ -98,7 +91,7 @@ class SavvyTransfer {
       return;
     } */
     // create new file
-    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO);
+    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle);
     // ensure each file get it's writer from IO
     // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
     //  in other word, this savvyfile does not need a writer(init);
@@ -107,6 +100,10 @@ class SavvyTransfer {
     }
 
     this.files.push(tmpFile);
+
+    await new Promise((resolve, reject) => {
+      setTimeout(resolve, 1);
+    });
     return tmpFile;
   }
 
@@ -141,9 +138,11 @@ class SavvyTransfer {
     let nextChunk: TChunk = file.nextChunk();
     // console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
     let response: Response = await fetch(nextChunk.filePath, { method: 'GET', headers: { Range: `bytes=${nextChunk.start}-${nextChunk.end}` } });
+
     let buffer: ArrayBuffer = await response.arrayBuffer();
     await this.IO.write(file, buffer);
 
+    file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
     if (file.isZip) {
       this.scheduleDownload(file as SavvyZipFile);
     } else {
@@ -155,6 +154,16 @@ class SavvyTransfer {
   public upload(name: string): void {
     console.log('upload');
   }
+}
+
+function dec2hex(dec: number) {
+  return ('0' + dec.toString(16)).substr(-2);
+}
+
+function generateId(len: number) {
+  var arr = new Uint8Array((len || 40) / 2);
+  window.crypto.getRandomValues(arr);
+  return Array.from(arr, dec2hex).join('');
 }
 
 export default SavvyTransfer;

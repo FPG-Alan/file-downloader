@@ -48,7 +48,7 @@ export class ZipWriter {
       d.set(buffer, header.byteLength);
 
       buffer = d;
-      console.log('add header');
+      // console.log('add header');
     }
 
     // begin set central directory
@@ -69,7 +69,7 @@ export class ZipWriter {
     if (isLast) {
       let end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData);
 
-      console.log('this file is the last to be added to this zip, add end.');
+      // console.log('this file is the last to be added to this zip, add end.');
 
       let tmpSize: number = 0,
         tmpOffset: number = buffer.byteLength,
@@ -96,7 +96,7 @@ export class ZipWriter {
 
     zipFile.offset += buffer.byteLength;
 
-    console.log('get a finalliy buffer, length: ' + buffer.byteLength);
+    // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
     return new Promise((resolve: Function, reject: Function) => {
       let tmpWrite: FileWriter = zipFile.fileWriter;
       tmpWrite.onwriteend = (e: ProgressEvent) => {

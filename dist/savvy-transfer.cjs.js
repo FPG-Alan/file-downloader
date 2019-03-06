@@ -1191,9 +1191,21 @@ var extmime = {
   xwd: 'image/x-xwindowdump',
   zip: 'application/zip'
 };
+var ext = {};
 function filemime(name) {
   var fext = fileext(name);
   return extmime[fext] || 'application/octet-stream';
+}
+function filetype(name) {
+  var fext = fileext(name);
+
+  if (ext[fext]) {
+    return ext[fext][1];
+  } else if (fext && fext.length > 1) {
+    return '%1 File'.replace('%1', fext.toUpperCase());
+  } else {
+    return 'File';
+  }
 }
 function fileext(name) {
   var uppercase = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
@@ -1584,8 +1596,7 @@ function () {
                   d = new Uint8Array(header.byteLength + buffer.byteLength);
                   d.set(header, 0);
                   d.set(buffer, header.byteLength);
-                  buffer = d;
-                  console.log('add header');
+                  buffer = d; // console.log('add header');
                 } // begin set central directory
 
 
@@ -1605,8 +1616,8 @@ function () {
                 }
 
                 if (isLast) {
-                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData);
-                  console.log('this file is the last to be added to this zip, add end.');
+                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData); // console.log('this file is the last to be added to this zip, add end.');
+
                   tmpSize = 0, tmpOffset = buffer.byteLength;
 
                   for (i in zipFile.dirData) {
@@ -1626,8 +1637,8 @@ function () {
                   buffer = tmpBuf;
                 }
 
-                zipFile.offset += buffer.byteLength;
-                console.log('get a finalliy buffer, length: ' + buffer.byteLength);
+                zipFile.offset += buffer.byteLength; // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
+
                 return _context.abrupt("return", new Promise(function (resolve, reject) {
                   var tmpWrite = zipFile.fileWriter;
 
@@ -1642,7 +1653,7 @@ function () {
                   tmpWrite.write(new Blob([buffer]));
                 }));
 
-              case 11:
+              case 10:
               case "end":
                 return _context.stop();
             }
@@ -2500,11 +2511,13 @@ function () {
 var SavvyFile =
 /*#__PURE__*/
 function () {
-  function SavvyFile(path, name, fileSize, chunkSize, IO_instance) {
+  // measure unit is byte per second
+  function SavvyFile(path, name, fileSize, chunkSize, IO_instance, progressHandle) {
     var _this = this;
 
     classCallCheck(this, SavvyFile);
 
+    this.id = void 0;
     this.isZip = false;
     this.chunklist = [];
     this.status = void 0;
@@ -2514,12 +2527,17 @@ function () {
     this.chunkSize = void 0;
     this.fileWriter = void 0;
     this.fileEntry = void 0;
+    this.remainSize = void 0;
+    this.speed = 0;
     this.nowChunkIndex = 0;
     this.IO = void 0;
+    this.startTime = 0;
     this.offset = 0;
     this.crc = 0;
     this.headerPos = 0;
     this.bufferAcc = 0;
+    this.fileType = 'File';
+    this.progressHandle = void 0;
 
     this.init = function () {
       return new Promise(function (resolve, reject) {
@@ -2532,12 +2550,24 @@ function () {
       });
     };
 
+    this.update = function (length) {
+      var duration = new Date().getTime() - _this.startTime;
+
+      _this.speed = length / duration * 1000;
+      _this.remainSize -= length;
+      _this.progressHandle && _this.progressHandle(_this.id, _this.speed, _this.remainSize);
+    };
+
     this.status = 'initializing';
     this.filePath = path;
     this.name = name;
     this.fileSize = fileSize;
     this.chunkSize = chunkSize;
     this.IO = IO_instance;
+    this.remainSize = fileSize;
+    this.progressHandle = progressHandle;
+    this.fileType = filetype(this.name);
+    this.id = new Date().getTime();
     var tmpStart = 0,
         tmpEnd = 0;
 
@@ -2557,6 +2587,8 @@ function () {
     key: "nextChunk",
     value: function nextChunk() {
       // make sure next chunk is available when status not chunk_empty
+      this.startTime = new Date().getTime();
+
       if (!this.chunklist[this.nowChunkIndex + 1]) {
         this.status = 'chunk_empty';
       }
@@ -2571,11 +2603,13 @@ function () {
 var SavvyZipFile =
 /*#__PURE__*/
 function () {
-  function SavvyZipFile(files, name, IO_instance) {
+  // measure unit is byte per second
+  function SavvyZipFile(files, name, IO_instance, progressHandle) {
     var _this = this;
 
     classCallCheck(this, SavvyZipFile);
 
+    this.id = void 0;
     this.chunklist = [];
     this.status = void 0;
     this.isZip = true;
@@ -2589,6 +2623,11 @@ function () {
     this.IO = void 0;
     this.offset = 0;
     this.dirData = [];
+    this.remainSize = void 0;
+    this.speed = 0;
+    this.startTime = 0;
+    this.progressHandle = void 0;
+    this.fileType = 'File';
 
     this.init = function () {
       return new Promise(function (resolve, reject) {
@@ -2601,13 +2640,26 @@ function () {
       });
     };
 
+    this.update = function (length) {
+      var tmpEndTime = new Date().getTime();
+      var duration = tmpEndTime - _this.startTime; // console.log('chunk ' + this.chunklist[this.nowChunkIndex - 1].start + '-' + this.chunklist[this.nowChunkIndex - 1].end + ' request complete at ' + tmpEndTime);
+
+      _this.speed = length / duration * 1000;
+      _this.remainSize -= length;
+      _this.progressHandle && _this.progressHandle(_this.id, _this.speed, _this.remainSize);
+    };
+
     this.status = 'initializing';
     this.IO = IO_instance;
     this.name = name;
     this.files = files;
+    this.fileType = filetype(this.name);
+    this.id = new Date().getTime();
     this.totalSize = files.reduce(function (prev, cur) {
       return prev + cur.fileSize;
     }, 0);
+    this.progressHandle = progressHandle;
+    this.remainSize = this.totalSize;
 
     for (var i = 0, l = files.length; i < l; i++) {
       this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length
@@ -2631,10 +2683,12 @@ function () {
   createClass(SavvyZipFile, [{
     key: "nextChunk",
     value: function nextChunk() {
-      // make sure next chunk is available when status not chunk_empty
+      this.startTime = new Date().getTime(); // make sure next chunk is available when status not chunk_empty
+
       if (!this.chunklist[this.nowChunkIndex + 1]) {
         this.status = 'chunk_empty';
-      }
+      } // console.log('request chunk: ' + this.chunklist[this.nowChunkIndex].start + '-' + this.chunklist[this.nowChunkIndex].end + ' at ' + this.startTime);
+
 
       return this.chunklist[this.nowChunkIndex++];
     }
@@ -2666,15 +2720,13 @@ var IS64BIT = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(naviga
 var SavvyTransfer =
 /*#__PURE__*/
 function () {
-  function SavvyTransfer() {
+  function SavvyTransfer(onProgress) {
     var _this = this;
 
     classCallCheck(this, SavvyTransfer);
 
     this.IO = void 0;
-    this.size = 0;
-    this.fileInited = 0;
-    this.fileAllAdded = false;
+    this.progressHandle = void 0;
     this.readyForDownload = false;
     this.waitReadyAndDownload = false;
     this.files = [];
@@ -2742,6 +2794,8 @@ function () {
                 return _this.IO.write(file, buffer);
 
               case 9:
+                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
+
                 if (file.isZip) {
                   _this.scheduleDownload(file);
                 } else {
@@ -2750,7 +2804,7 @@ function () {
 
                 return _context.abrupt("return");
 
-              case 11:
+              case 12:
               case "end":
                 return _context.stop();
             }
@@ -2763,20 +2817,16 @@ function () {
       };
     }();
 
-    this.setIOMethod(); // this.IO = new MemoryIO();
-    // this.IO = new FilesystemIO();
+    if (window.requestFileSystem || window.webkitRequestFileSystem) {
+      this.IO = new FilesystemIO();
+    } else {
+      this.IO = new MemoryIO();
+    }
+
+    this.progressHandle = onProgress;
   }
 
   createClass(SavvyTransfer, [{
-    key: "setIOMethod",
-    value: function setIOMethod() {
-      if (window.requestFileSystem || window.webkitRequestFileSystem) {
-        this.IO = new FilesystemIO();
-      } else {
-        this.IO = new MemoryIO();
-      }
-    }
-  }, {
     key: "addFiles",
     value: function () {
       var _addFiles = asyncToGenerator(
@@ -2827,7 +2877,7 @@ function () {
                 }
 
                 // create a zip file
-                zipFile = new SavvyZipFile(savvyFiles, 'test.zip', this.IO);
+                zipFile = new SavvyZipFile(savvyFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
                 _context2.next = 16;
                 return zipFile.init();
 
@@ -2961,7 +3011,7 @@ function () {
                 } */
                 // create new file
 
-                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO); // ensure each file get it's writer from IO
+                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle); // ensure each file get it's writer from IO
                 // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
                 //  in other word, this savvyfile does not need a writer(init);
 
@@ -2975,9 +3025,15 @@ function () {
 
               case 15:
                 this.files.push(tmpFile);
+                _context4.next = 18;
+                return new Promise(function (resolve, reject) {
+                  setTimeout(resolve, 1);
+                });
+
+              case 18:
                 return _context4.abrupt("return", tmpFile);
 
-              case 17:
+              case 19:
               case "end":
                 return _context4.stop();
             }
@@ -3003,6 +3059,16 @@ function () {
 }();
 
 SavvyTransfer.SIZE_LIMIT = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
-SavvyTransfer.CHUNK_SIZE = 1024 * 1024 * 16;
+SavvyTransfer.CHUNK_SIZE = 1024 * 1024 * 10;
+
+function dec2hex(dec) {
+  return ('0' + dec.toString(16)).substr(-2);
+}
+
+function generateId(len) {
+  var arr = new Uint8Array((len || 40) / 2);
+  window.crypto.getRandomValues(arr);
+  return Array.from(arr, dec2hex).join('');
+}
 
 module.exports = SavvyTransfer;
