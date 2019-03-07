@@ -20,7 +20,7 @@ export default class SavvyFile {
   // measure unit is byte per second
   public speed: number = 0;
 
-  private nowChunkIndex: number = 0;
+  public nowChunkIndex: number = 0;
   private IO: FilesystemIO | MemoryIO;
 
   private startTime: number = 0;
@@ -72,7 +72,10 @@ export default class SavvyFile {
           this.fileWriter = result.fileWriter;
           this.fileEntry = result.fileEntry;
 
-          this.status = 'inited';
+          if (this.status !== 'abort') {
+            this.status = 'inited';
+          }
+
           resolve();
         },
         reject
@@ -96,5 +99,13 @@ export default class SavvyFile {
       this.status = 'chunk_empty';
     }
     return this.chunklist[this.nowChunkIndex++];
+  }
+
+  public resumePreChunk(): void {
+    if (this.status === 'chunk_empty') {
+      this.status = 'inited';
+    }
+
+    this.nowChunkIndex -= 1;
   }
 }

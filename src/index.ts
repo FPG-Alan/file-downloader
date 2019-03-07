@@ -10,11 +10,11 @@ class SavvyTransfer {
   static CHUNK_SIZE: number = 1024 * 1024 * 10;
   private IO: FilesystemIO | MemoryIO;
   private progressHandle: Function;
+  private running: boolean = false;
+  private freeze: boolean = false;
 
-  private readyForDownload: boolean = false;
-  private waitReadyAndDownload: boolean = false;
+  public files: Array<SavvyFile | SavvyZipFile> = [];
 
-  public files: SavvyFile[] = [];
   constructor(onProgress: Function) {
     if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
       this.IO = new FilesystemIO();
@@ -22,53 +22,68 @@ class SavvyTransfer {
       this.IO = new MemoryIO();
     }
     this.progressHandle = onProgress;
+
+    this.files = new Proxy(this.files, {
+      set: (target: any, property: any, value: any, receiver: any): boolean => {
+        target[property] = value;
+        if (property === 'length' && value > 0 && !this.running) {
+          this.schedule();
+        }
+        return true;
+      }
+    });
   }
 
-  public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<SavvyFile[] | SavvyZipFile> {
-    let savvyFiles: SavvyFile[] = [];
+  public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<Array<SavvyFile | SavvyZipFile>> {
+    let tmpFiles: SavvyFile[] = [];
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       let tmpFile: SavvyFile | undefined = await this._addFile(files[i].path, files[i].name, asZip);
 
       if (tmpFile) {
-        savvyFiles.push(tmpFile);
+        tmpFiles.push(tmpFile);
       }
     }
-
-    let zipFile: SavvyZipFile | null = null;
     if (asZip) {
       // create a zip file
-
-      zipFile = new SavvyZipFile(savvyFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle);
-
-      await zipFile.init();
+      let tmpZipFile: SavvyZipFile = new SavvyZipFile(tmpFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle);
+      this.files.push(tmpZipFile);
     }
 
-    this.readyForDownload = true;
+    return this.files;
+  }
+  public async addFile(path: string, name: string): Promise<Array<SavvyFile | SavvyZipFile>> {
+    await this._addFile(path, name);
+    return this.files;
+  }
+  /**
+   * pause all process
+   */
+  public pause(): boolean {
+    if (this.running) {
+      this.freeze = true;
 
-    if (this.waitReadyAndDownload) {
-      this.waitReadyAndDownload = false;
-      this.scheduleDownload();
+      return true;
     }
-    if (asZip) {
-      return zipFile!;
-    } else {
-      return savvyFiles;
+    return false;
+  }
+  public resume() {
+    if (this.running) {
+      this.freeze = false;
+
+      this.schedule();
     }
   }
-  public async addFile(path: string, name: string): Promise<SavvyFile | undefined> {
-    let tmpFile: SavvyFile | undefined = await this._addFile(path, name);
+  public removeFile(id: number): SavvyFile | SavvyZipFile | undefined {
+    this.pause();
 
-    this.readyForDownload = true;
-    if (this.waitReadyAndDownload) {
-      this.waitReadyAndDownload = false;
-      this.scheduleDownload();
+    let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id);
+
+    if (tmpFile) {
+      tmpFile.status = 'abort';
     }
+    this.resume();
 
     return tmpFile;
-  }
-
-  public showFiles() {
-    console.log('show files');
   }
   private async _addFile(path: string, name: string, asZip: boolean = false): Promise<SavvyFile | undefined> {
     if (!path) {
@@ -96,10 +111,8 @@ class SavvyTransfer {
     // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
     //  in other word, this savvyfile does not need a writer(init);
     if (!asZip) {
-      await tmpFile.init();
+      this.files.push(tmpFile);
     }
-
-    this.files.push(tmpFile);
 
     await new Promise((resolve, reject) => {
       setTimeout(resolve, 1);
@@ -107,53 +120,75 @@ class SavvyTransfer {
     return tmpFile;
   }
 
-  // add file 之后手动调用, 此时如果files还没有准备好, 则设置变量等待.
-  public scheduleDownload = (fileForZip?: SavvyZipFile) => {
-    if (this.readyForDownload) {
-      if (fileForZip) {
-        if (fileForZip.status === 'inited') {
-          this.fetchData(fileForZip);
-        } else {
-          this.IO.download([fileForZip] as SavvyZipFile[]);
-        }
+  private schedule = (): void => {
+    if (!this.freeze) {
+      this.running = true;
+      let currentFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.status !== 'complete' && file.status !== 'abort');
+
+      if (currentFile) {
+        this.processCurrentFile(currentFile);
       } else {
-        // normal download, as sperate files.
-        if (this.files.length > 0) {
-          let nextFile: SavvyFile | undefined = this.files.find((file: SavvyFile) => file.status === 'inited');
-
-          // 还有等待下载的文件
-          if (nextFile) {
-            this.fetchData(nextFile);
-          } else {
-            this.IO.download(this.files.filter((file: SavvyFile) => file.status === 'chunk_empty'));
-          }
-        }
+        console.log('all files are in complete state, transfer stop.');
+        this.running = false;
       }
-    } else {
-      this.waitReadyAndDownload = true;
     }
   };
-  private fetchData = async (file: SavvyFile | SavvyZipFile): Promise<undefined> => {
-    // here must be an unprocessed block, cos file.status is not 'chunk_empty'
-    let nextChunk: TChunk = file.nextChunk();
-    // console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
-    let response: Response = await fetch(nextChunk.filePath, { method: 'GET', headers: { Range: `bytes=${nextChunk.start}-${nextChunk.end}` } });
 
-    let buffer: ArrayBuffer = await response.arrayBuffer();
-    await this.IO.write(file, buffer);
+  private processCurrentFile = async (file: SavvyFile | SavvyZipFile): Promise<undefined> => {
+    if (!this.freeze) {
+      if (file.status === 'abort') {
+        this.schedule();
+        return;
+      }
+      // need init to get a filewriter
+      if (file.status === 'initializing') {
+        await file.init();
 
-    file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
-    if (file.isZip) {
-      this.scheduleDownload(file as SavvyZipFile);
-    } else {
-      this.scheduleDownload();
+        this.schedule();
+        return;
+      }
+
+      // no more chunk need be download, should
+      if (file.status === 'chunk_empty') {
+        this.IO.download([file]);
+
+        file.status = 'complete';
+
+        // start download next file
+        this.schedule();
+        // this place may also need a update.
+        // file.update()
+        return;
+      }
+
+      // file.status should be inited
+      let nextChunk: TChunk = file.nextChunk();
+      let response: Response = await fetch(nextChunk.filePath, { method: 'GET', headers: { Range: `bytes=${nextChunk.start}-${nextChunk.end}` } });
+
+      if (this.freeze) {
+        // throw this chunk
+        file.resumePreChunk();
+
+        return;
+      }
+      let buffer: ArrayBuffer = await response.arrayBuffer();
+
+      if (this.freeze) {
+        // throw this chunk
+        file.resumePreChunk();
+
+        return;
+      }
+      if (file.status !== 'abort') {
+        await this.IO.write(file, buffer);
+        file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
+
+        this.schedule();
+      }
+
+      return;
     }
-
-    return;
   };
-  public upload(name: string): void {
-    console.log('upload');
-  }
 }
 
 function dec2hex(dec: number) {

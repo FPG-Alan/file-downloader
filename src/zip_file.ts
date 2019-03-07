@@ -71,7 +71,9 @@ export default class SavvyZipFile {
           this.fileWriter = result.fileWriter;
           this.fileEntry = result.fileEntry;
 
-          this.status = 'inited';
+          if (this.status !== 'abort') {
+            this.status = 'inited';
+          }
           resolve();
         },
         reject
@@ -112,5 +114,13 @@ export default class SavvyZipFile {
 
     // console.log('request chunk: ' + this.chunklist[this.nowChunkIndex].start + '-' + this.chunklist[this.nowChunkIndex].end + ' at ' + this.startTime);
     return this.chunklist[this.nowChunkIndex++];
+  }
+
+  public resumePreChunk(): void {
+    if (this.status === 'chunk_empty') {
+      this.status = 'inited';
+    }
+
+    this.nowChunkIndex -= 1;
   }
 }

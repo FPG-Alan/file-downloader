@@ -42,7 +42,7 @@ export default class MemoryIO extends IO {
     });
   }
 
-  public download(files: SavvyFile[] | SavvyZipFile[]): void {
+  public download(files: Array<SavvyFile | SavvyZipFile>): void {
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       let blob: Blob = files[i].fileWriter.getBlob(files[i].name);
       let blob_url: string = '';

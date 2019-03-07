@@ -153,7 +153,7 @@ export default class FilesystemIO extends IO {
    * @param {SavvyFile[]}Files
    * @public
    */
-  public download(files: SavvyFile[] | SavvyZipFile[]): void {
+  public download(files: Array<SavvyFile | SavvyZipFile>): void {
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       let fileEntry: FileEntry = files[i].fileEntry as FileEntry;
       if (typeof files[i].fileEntry.file === 'function') {

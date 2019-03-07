@@ -2548,7 +2548,11 @@
 	        _this.IO.getFileWriter(_this, function (result) {
 	          _this.fileWriter = result.fileWriter;
 	          _this.fileEntry = result.fileEntry;
-	          _this.status = 'inited';
+
+	          if (_this.status !== 'abort') {
+	            _this.status = 'inited';
+	          }
+
 	          resolve();
 	        }, reject);
 	      });
@@ -2599,6 +2603,15 @@
 
 	      return this.chunklist[this.nowChunkIndex++];
 	    }
+	  }, {
+	    key: "resumePreChunk",
+	    value: function resumePreChunk() {
+	      if (this.status === 'chunk_empty') {
+	        this.status = 'inited';
+	      }
+
+	      this.nowChunkIndex -= 1;
+	    }
 	  }]);
 
 	  return SavvyFile;
@@ -2638,7 +2651,11 @@
 	        _this.IO.getFileWriter(_this, function (result) {
 	          _this.fileWriter = result.fileWriter;
 	          _this.fileEntry = result.fileEntry;
-	          _this.status = 'inited';
+
+	          if (_this.status !== 'abort') {
+	            _this.status = 'inited';
+	          }
+
 	          resolve();
 	        }, reject);
 	      });
@@ -2697,6 +2714,15 @@
 	      return this.chunklist[this.nowChunkIndex++];
 	    }
 	  }, {
+	    key: "resumePreChunk",
+	    value: function resumePreChunk() {
+	      if (this.status === 'chunk_empty') {
+	        this.status = 'inited';
+	      }
+
+	      this.nowChunkIndex -= 1;
+	    }
+	  }, {
 	    key: "currentFile",
 	    get: function get() {
 	      var tmpNowChunkIndex = this.nowChunkIndex - 1;
@@ -2731,41 +2757,28 @@
 
 	    this.IO = void 0;
 	    this.progressHandle = void 0;
-	    this.readyForDownload = false;
-	    this.waitReadyAndDownload = false;
+	    this.running = false;
+	    this.freeze = false;
 	    this.files = [];
 
-	    this.scheduleDownload = function (fileForZip) {
-	      if (_this.readyForDownload) {
-	        if (fileForZip) {
-	          if (fileForZip.status === 'inited') {
-	            _this.fetchData(fileForZip);
-	          } else {
-	            _this.IO.download([fileForZip]);
-	          }
+	    this.schedule = function () {
+	      if (!_this.freeze) {
+	        _this.running = true;
+
+	        var currentFile = _this.files.find(function (file) {
+	          return file.status !== 'complete' && file.status !== 'abort';
+	        });
+
+	        if (currentFile) {
+	          _this.processCurrentFile(currentFile);
 	        } else {
-	          // normal download, as sperate files.
-	          if (_this.files.length > 0) {
-	            var nextFile = _this.files.find(function (file) {
-	              return file.status === 'inited';
-	            }); // 还有等待下载的文件
-
-
-	            if (nextFile) {
-	              _this.fetchData(nextFile);
-	            } else {
-	              _this.IO.download(_this.files.filter(function (file) {
-	                return file.status === 'chunk_empty';
-	              }));
-	            }
-	          }
+	          console.log('all files are in complete state, transfer stop.');
+	          _this.running = false;
 	        }
-	      } else {
-	        _this.waitReadyAndDownload = true;
 	      }
 	    };
 
-	    this.fetchData =
+	    this.processCurrentFile =
 	    /*#__PURE__*/
 	    function () {
 	      var _ref = asyncToGenerator(
@@ -2776,10 +2789,54 @@
 	          while (1) {
 	            switch (_context.prev = _context.next) {
 	              case 0:
-	                // here must be an unprocessed block, cos file.status is not 'chunk_empty'
-	                nextChunk = file.nextChunk(); // console.log(file.name + ' downloading chunk: ' + nextChunk.start + '-' + nextChunk.end);
+	                if (_this.freeze) {
+	                  _context.next = 33;
+	                  break;
+	                }
 
-	                _context.next = 3;
+	                if (!(file.status === 'abort')) {
+	                  _context.next = 4;
+	                  break;
+	                }
+
+	                _this.schedule();
+
+	                return _context.abrupt("return");
+
+	              case 4:
+	                if (!(file.status === 'initializing')) {
+	                  _context.next = 9;
+	                  break;
+	                }
+
+	                _context.next = 7;
+	                return file.init();
+
+	              case 7:
+	                _this.schedule();
+
+	                return _context.abrupt("return");
+
+	              case 9:
+	                if (!(file.status === 'chunk_empty')) {
+	                  _context.next = 14;
+	                  break;
+	                }
+
+	                _this.IO.download([file]);
+
+	                file.status = 'complete'; // start download next file
+
+	                _this.schedule(); // this place may also need a update.
+	                // file.update()
+
+
+	                return _context.abrupt("return");
+
+	              case 14:
+	                // file.status should be inited
+	                nextChunk = file.nextChunk();
+	                _context.next = 17;
 	                return fetch(nextChunk.filePath, {
 	                  method: 'GET',
 	                  headers: {
@@ -2787,28 +2844,52 @@
 	                  }
 	                });
 
-	              case 3:
+	              case 17:
 	                response = _context.sent;
-	                _context.next = 6;
-	                return response.arrayBuffer();
 
-	              case 6:
-	                buffer = _context.sent;
-	                _context.next = 9;
-	                return _this.IO.write(file, buffer);
-
-	              case 9:
-	                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
-
-	                if (file.isZip) {
-	                  _this.scheduleDownload(file);
-	                } else {
-	                  _this.scheduleDownload();
+	                if (!_this.freeze) {
+	                  _context.next = 21;
+	                  break;
 	                }
 
+	                // throw this chunk
+	                file.resumePreChunk();
 	                return _context.abrupt("return");
 
-	              case 12:
+	              case 21:
+	                _context.next = 23;
+	                return response.arrayBuffer();
+
+	              case 23:
+	                buffer = _context.sent;
+
+	                if (!_this.freeze) {
+	                  _context.next = 27;
+	                  break;
+	                }
+
+	                // throw this chunk
+	                file.resumePreChunk();
+	                return _context.abrupt("return");
+
+	              case 27:
+	                if (!(file.status !== 'abort')) {
+	                  _context.next = 32;
+	                  break;
+	                }
+
+	                _context.next = 30;
+	                return _this.IO.write(file, buffer);
+
+	              case 30:
+	                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
+
+	                _this.schedule();
+
+	              case 32:
+	                return _context.abrupt("return");
+
+	              case 33:
 	              case "end":
 	                return _context.stop();
 	            }
@@ -2828,6 +2909,17 @@
 	    }
 
 	    this.progressHandle = onProgress;
+	    this.files = new Proxy(this.files, {
+	      set: function set(target, property, value, receiver) {
+	        target[property] = value;
+
+	        if (property === 'length' && value > 0 && !_this.running) {
+	          _this.schedule();
+	        }
+
+	        return true;
+	      }
+	    });
 	  }
 
 	  createClass(SavvyTransfer, [{
@@ -2837,18 +2929,18 @@
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee2(files) {
 	        var asZip,
-	            savvyFiles,
+	            tmpFiles,
 	            i,
 	            l,
 	            tmpFile,
-	            zipFile,
+	            tmpZipFile,
 	            _args2 = arguments;
 	        return regenerator.wrap(function _callee2$(_context2) {
 	          while (1) {
 	            switch (_context2.prev = _context2.next) {
 	              case 0:
 	                asZip = _args2.length > 1 && _args2[1] !== undefined ? _args2[1] : false;
-	                savvyFiles = [];
+	                tmpFiles = [];
 	                i = 0, l = files.length;
 
 	              case 3:
@@ -2864,7 +2956,7 @@
 	                tmpFile = _context2.sent;
 
 	                if (tmpFile) {
-	                  savvyFiles.push(tmpFile);
+	                  tmpFiles.push(tmpFile);
 	                }
 
 	              case 8:
@@ -2873,37 +2965,15 @@
 	                break;
 
 	              case 11:
-	                zipFile = null;
-
-	                if (!asZip) {
-	                  _context2.next = 16;
-	                  break;
+	                if (asZip) {
+	                  // create a zip file
+	                  tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
+	                  this.files.push(tmpZipFile);
 	                }
 
-	                // create a zip file
-	                zipFile = new SavvyZipFile(savvyFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
-	                _context2.next = 16;
-	                return zipFile.init();
+	                return _context2.abrupt("return", this.files);
 
-	              case 16:
-	                this.readyForDownload = true;
-
-	                if (this.waitReadyAndDownload) {
-	                  this.waitReadyAndDownload = false;
-	                  this.scheduleDownload();
-	                }
-
-	                if (!asZip) {
-	                  _context2.next = 22;
-	                  break;
-	                }
-
-	                return _context2.abrupt("return", zipFile);
-
-	              case 22:
-	                return _context2.abrupt("return", savvyFiles);
-
-	              case 23:
+	              case 13:
 	              case "end":
 	                return _context2.stop();
 	            }
@@ -2923,7 +2993,6 @@
 	      var _addFile2 = asyncToGenerator(
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee3(path, name) {
-	        var tmpFile;
 	        return regenerator.wrap(function _callee3$(_context3) {
 	          while (1) {
 	            switch (_context3.prev = _context3.next) {
@@ -2932,17 +3001,9 @@
 	                return this._addFile(path, name);
 
 	              case 2:
-	                tmpFile = _context3.sent;
-	                this.readyForDownload = true;
+	                return _context3.abrupt("return", this.files);
 
-	                if (this.waitReadyAndDownload) {
-	                  this.waitReadyAndDownload = false;
-	                  this.scheduleDownload();
-	                }
-
-	                return _context3.abrupt("return", tmpFile);
-
-	              case 6:
+	              case 3:
 	              case "end":
 	                return _context3.stop();
 	            }
@@ -2956,10 +3017,42 @@
 
 	      return addFile;
 	    }()
+	    /**
+	     * pause all process
+	     */
+
 	  }, {
-	    key: "showFiles",
-	    value: function showFiles() {
-	      console.log('show files');
+	    key: "pause",
+	    value: function pause() {
+	      if (this.running) {
+	        this.freeze = true;
+	        return true;
+	      }
+
+	      return false;
+	    }
+	  }, {
+	    key: "resume",
+	    value: function resume() {
+	      if (this.running) {
+	        this.freeze = false;
+	        this.schedule();
+	      }
+	    }
+	  }, {
+	    key: "removeFile",
+	    value: function removeFile(id) {
+	      this.pause();
+	      var tmpFile = this.files.find(function (file) {
+	        return file.id === id;
+	      });
+
+	      if (tmpFile) {
+	        tmpFile.status = 'abort';
+	      }
+
+	      this.resume();
+	      return tmpFile;
 	    }
 	  }, {
 	    key: "_addFile",
@@ -3019,25 +3112,19 @@
 	                // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
 	                //  in other word, this savvyfile does not need a writer(init);
 
-	                if (asZip) {
-	                  _context4.next = 15;
-	                  break;
+	                if (!asZip) {
+	                  this.files.push(tmpFile);
 	                }
 
 	                _context4.next = 15;
-	                return tmpFile.init();
-
-	              case 15:
-	                this.files.push(tmpFile);
-	                _context4.next = 18;
 	                return new Promise(function (resolve, reject) {
 	                  setTimeout(resolve, 1);
 	                });
 
-	              case 18:
+	              case 15:
 	                return _context4.abrupt("return", tmpFile);
 
-	              case 19:
+	              case 16:
 	              case "end":
 	                return _context4.stop();
 	            }
@@ -3050,13 +3137,7 @@
 	      }
 
 	      return _addFile;
-	    }() // add file 之后手动调用, 此时如果files还没有准备好, 则设置变量等待.
-
-	  }, {
-	    key: "upload",
-	    value: function upload(name) {
-	      console.log('upload');
-	    }
+	    }()
 	  }]);
 
 	  return SavvyTransfer;
