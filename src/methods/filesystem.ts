@@ -21,6 +21,47 @@ export default class FilesystemIO extends IO {
 
         dirReader.readEntries((entries: Entry[]) => {
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
+          console.log(entries);
+          /* entries.map((entry: Entry) => {
+            entry.remove(() => {
+              console.log('remove file [' + entry.name + '] from filesystem successful.');
+            });
+          }); */
+        });
+      });
+    });
+  }
+  public removeFile(file: SavvyFile | SavvyZipFile): Promise<undefined> {
+    return new Promise((resolve: Function, reject: Function) => {
+      customWindow.requestFileSystem(TEMPORARY, 0x10000, (fs: FileSystem) => {
+        fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
+          let dirReader: DirectoryReader = directoryEntry.createReader();
+
+          dirReader.readEntries((entries: Entry[]) => {
+            entries.forEach((entry: Entry) => {
+              // TO-DO: need check if this file is being write to filesystem...
+              if (entry.name === file.name + file.id) {
+                entry.remove(() => {
+                  console.log('remove file [' + entry.name + '] from filesystem successful.');
+
+                  resolve();
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+  }
+
+  public removeAll() {
+    customWindow.requestFileSystem(TEMPORARY, 0x10000, (fs: FileSystem) => {
+      // free space....
+      fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
+        let dirReader: DirectoryReader = directoryEntry.createReader();
+
+        dirReader.readEntries((entries: Entry[]) => {
+          // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
           entries.map((entry: Entry) => {
             entry.remove(() => {
               console.log('remove file [' + entry.name + '] from filesystem successful.');
@@ -38,11 +79,38 @@ export default class FilesystemIO extends IO {
   public getFileWriter(file: SavvyFile | SavvyZipFile, successCallback: Function, errorCallback: Function): void {
     customWindow.requestFileSystem(TEMPORARY, file.fileSize, (fs: FileSystem) => {
       fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
-        fs.root.getFile('savvy/' + file.name, { create: true }, (fileEntry: FileEntry) => {
-          fileEntry.createWriter((fw: FileWriter) => {
-            successCallback({
-              fileEntry: fileEntry,
-              fileWriter: fw
+        fs.root.getFile('savvy/' + file.name + file.id, { create: true }, (fileEntry: FileEntry) => {
+          fileEntry.getMetadata((metadata: Metadata) => {
+            console.log(metadata);
+            fileEntry.createWriter((fw: FileWriter) => {
+              if (metadata.size && metadata.size !== 0) {
+                // set offset as file size, the plus op may not effective
+                if (file.offset === metadata.size) {
+                  console.log(file.offset, metadata.size);
+                  fw.seek(file.offset + 1);
+                } else if (file.offset < metadata.size) {
+                  console.log(file.offset + ' ,' + metadata.size + ' - finally find u!');
+                  fw.onwriteend = () => {
+                    fw.seek(file.offset + 1);
+                    successCallback({
+                      fileEntry: fileEntry,
+                      fileWriter: fw
+                    });
+
+                    return;
+                  };
+
+                  fw.truncate(file.offset);
+                } else {
+                  fw.seek(0);
+
+                  (file as SavvyZipFile).abortAllResumeData();
+                }
+              }
+              successCallback({
+                fileEntry: fileEntry,
+                fileWriter: fw
+              });
             });
           });
         });

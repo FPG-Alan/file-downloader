@@ -19,7 +19,6 @@ export class ZipWriter {
   private dataLength: number = 0;
 
   private offset: number = 0;
-  private dirData: Uint8Array[] = [];
 
   public async add(currentFile: SavvyFile, zipFile: SavvyZipFile, _buffer: ArrayBuffer, isLast: boolean): Promise<undefined> {
     // part of the current file.
@@ -30,6 +29,7 @@ export class ZipWriter {
 
     let fileName: string = unescape(encodeURIComponent(currentFile.name));
     currentFile.bufferAcc += buffer.byteLength;
+    currentFile.crc = crc;
 
     if (currentFile.offset === 0) {
       // begin set header
@@ -54,7 +54,7 @@ export class ZipWriter {
     // begin set central directory
     if (currentFile.bufferAcc === currentFile.fileSize) {
       let centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
-      zipFile.dirData.push(centralDir.dirRecord);
+      // zipFile.dirData.push(centralDir.dirRecord);
       let centralDirBuffer: Uint8Array = centralDir.dataDescriptor;
 
       let d = new Uint8Array(buffer.byteLength + centralDirBuffer.byteLength);
@@ -67,26 +67,30 @@ export class ZipWriter {
     }
 
     if (isLast) {
-      let end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData);
+      let end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, []);
 
       // console.log('this file is the last to be added to this zip, add end.');
+
+      let dirData: any[] = zipFile.files.map(
+        (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
+      );
 
       let tmpSize: number = 0,
         tmpOffset: number = buffer.byteLength,
         tmpBuf: Uint8Array;
 
-      for (let i in zipFile.dirData) {
-        tmpSize += zipFile.dirData[i].byteLength;
+      for (let i in dirData) {
+        tmpSize += dirData[i].byteLength;
       }
 
       tmpBuf = new Uint8Array(buffer.byteLength + tmpSize + end.byteLength);
 
       tmpBuf.set(buffer, 0);
 
-      for (let i in zipFile.dirData) {
+      for (let i in dirData) {
         // console.log(this.dirData[i], tmpOffset);
-        tmpBuf.set(zipFile.dirData[i], tmpOffset);
-        tmpOffset += zipFile.dirData[i].byteLength;
+        tmpBuf.set(dirData[i], tmpOffset);
+        tmpOffset += dirData[i].byteLength;
       }
 
       tmpBuf.set(end, tmpOffset);

@@ -66,6 +66,8 @@ class MemoryWrite {
   private blobList: MSBlobBuilder | Blob[];
   public onwriteend: Function | null;
   public onerror: Function | null;
+
+  public position: number = 0;
   constructor() {
     if (MSIE) {
       this.blobList = new MSBlobBuilder();

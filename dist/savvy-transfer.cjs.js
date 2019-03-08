@@ -808,6 +808,36 @@ function _asyncToGenerator(fn) {
 
 var asyncToGenerator = _asyncToGenerator;
 
+function _arrayWithoutHoles(arr) {
+  if (Array.isArray(arr)) {
+    for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) {
+      arr2[i] = arr[i];
+    }
+
+    return arr2;
+  }
+}
+
+var arrayWithoutHoles = _arrayWithoutHoles;
+
+function _iterableToArray(iter) {
+  if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter);
+}
+
+var iterableToArray = _iterableToArray;
+
+function _nonIterableSpread() {
+  throw new TypeError("Invalid attempt to spread non-iterable instance");
+}
+
+var nonIterableSpread = _nonIterableSpread;
+
+function _toConsumableArray(arr) {
+  return arrayWithoutHoles(arr) || iterableToArray(arr) || nonIterableSpread();
+}
+
+var toConsumableArray = _toConsumableArray;
+
 function _classCallCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new TypeError("Cannot call a class as a function");
@@ -1557,7 +1587,6 @@ function () {
     this.files = {};
     this.dataLength = 0;
     this.offset = 0;
-    this.dirData = [];
   }
 
   createClass(ZipWriter, [{
@@ -1566,7 +1595,7 @@ function () {
       var _add = asyncToGenerator(
       /*#__PURE__*/
       regenerator.mark(function _callee(currentFile, zipFile, _buffer, isLast) {
-        var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, end, tmpSize, tmpOffset, tmpBuf, i, _i;
+        var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, end, dirData, tmpSize, tmpOffset, tmpBuf, i, _i;
 
         return regenerator.wrap(function _callee$(_context) {
           while (1) {
@@ -1578,6 +1607,7 @@ function () {
                 ziper = new ZIPClass(zipFile.fileSize);
                 fileName = unescape(encodeURIComponent(currentFile.name));
                 currentFile.bufferAcc += buffer.byteLength;
+                currentFile.crc = crc;
 
                 if (currentFile.offset === 0) {
                   // begin set header
@@ -1601,8 +1631,8 @@ function () {
 
 
                 if (currentFile.bufferAcc === currentFile.fileSize) {
-                  centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
-                  zipFile.dirData.push(centralDir.dirRecord);
+                  centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos); // zipFile.dirData.push(centralDir.dirRecord);
+
                   centralDirBuffer = centralDir.dataDescriptor;
                   _d = new Uint8Array(buffer.byteLength + centralDirBuffer.byteLength);
 
@@ -1616,21 +1646,24 @@ function () {
                 }
 
                 if (isLast) {
-                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, this.dirData); // console.log('this file is the last to be added to this zip, add end.');
+                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, []); // console.log('this file is the last to be added to this zip, add end.');
 
+                  dirData = zipFile.files.map(function (file) {
+                    return ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord;
+                  });
                   tmpSize = 0, tmpOffset = buffer.byteLength;
 
-                  for (i in zipFile.dirData) {
-                    tmpSize += zipFile.dirData[i].byteLength;
+                  for (i in dirData) {
+                    tmpSize += dirData[i].byteLength;
                   }
 
                   tmpBuf = new Uint8Array(buffer.byteLength + tmpSize + end.byteLength);
                   tmpBuf.set(buffer, 0);
 
-                  for (_i in zipFile.dirData) {
+                  for (_i in dirData) {
                     // console.log(this.dirData[i], tmpOffset);
-                    tmpBuf.set(zipFile.dirData[_i], tmpOffset);
-                    tmpOffset += zipFile.dirData[_i].byteLength;
+                    tmpBuf.set(dirData[_i], tmpOffset);
+                    tmpOffset += dirData[_i].byteLength;
                   }
 
                   tmpBuf.set(end, tmpOffset);
@@ -1653,7 +1686,7 @@ function () {
                   tmpWrite.write(new Blob([buffer]));
                 }));
 
-              case 10:
+              case 11:
               case "end":
                 return _context.stop();
             }
@@ -2145,37 +2178,109 @@ function (_IO) {
         var dirReader = directoryEntry.createReader();
         dirReader.readEntries(function (entries) {
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
-          entries.map(function (entry) {
-            entry.remove(function () {
+          console.log(entries);
+          /* entries.map((entry: Entry) => {
+            entry.remove(() => {
               console.log('remove file [' + entry.name + '] from filesystem successful.');
             });
-          });
+          }); */
         });
       });
     });
     return _this;
   }
-  /**
-   * @param {SavvyFile} file
-   * @param {Function} successCallback
-   * @param {Function} errorCallback
-   */
-
 
   createClass(FilesystemIO, [{
+    key: "removeFile",
+    value: function removeFile(file) {
+      return new Promise(function (resolve, reject) {
+        customWindow.requestFileSystem(TEMPORARY, 0x10000, function (fs) {
+          fs.root.getDirectory('savvy', {
+            create: true
+          }, function (directoryEntry) {
+            var dirReader = directoryEntry.createReader();
+            dirReader.readEntries(function (entries) {
+              entries.forEach(function (entry) {
+                // TO-DO: need check if this file is being write to filesystem...
+                if (entry.name === file.name + file.id) {
+                  entry.remove(function () {
+                    console.log('remove file [' + entry.name + '] from filesystem successful.');
+                    resolve();
+                  });
+                }
+              });
+            });
+          });
+        });
+      });
+    }
+  }, {
+    key: "removeAll",
+    value: function removeAll() {
+      customWindow.requestFileSystem(TEMPORARY, 0x10000, function (fs) {
+        // free space....
+        fs.root.getDirectory('savvy', {
+          create: true
+        }, function (directoryEntry) {
+          var dirReader = directoryEntry.createReader();
+          dirReader.readEntries(function (entries) {
+            // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
+            entries.map(function (entry) {
+              entry.remove(function () {
+                console.log('remove file [' + entry.name + '] from filesystem successful.');
+              });
+            });
+          });
+        });
+      });
+    }
+    /**
+     * @param {SavvyFile} file
+     * @param {Function} successCallback
+     * @param {Function} errorCallback
+     */
+
+  }, {
     key: "getFileWriter",
     value: function getFileWriter(file, successCallback, errorCallback) {
       customWindow.requestFileSystem(TEMPORARY, file.fileSize, function (fs) {
         fs.root.getDirectory('savvy', {
           create: true
         }, function (directoryEntry) {
-          fs.root.getFile('savvy/' + file.name, {
+          fs.root.getFile('savvy/' + file.name + file.id, {
             create: true
           }, function (fileEntry) {
-            fileEntry.createWriter(function (fw) {
-              successCallback({
-                fileEntry: fileEntry,
-                fileWriter: fw
+            fileEntry.getMetadata(function (metadata) {
+              console.log(metadata);
+              fileEntry.createWriter(function (fw) {
+                if (metadata.size && metadata.size !== 0) {
+                  // set offset as file size, the plus op may not effective
+                  if (file.offset === metadata.size) {
+                    console.log(file.offset, metadata.size);
+                    fw.seek(file.offset + 1);
+                  } else if (file.offset < metadata.size) {
+                    console.log(file.offset + ' ,' + metadata.size + ' - finally find u!');
+
+                    fw.onwriteend = function () {
+                      fw.seek(file.offset + 1);
+                      successCallback({
+                        fileEntry: fileEntry,
+                        fileWriter: fw
+                      });
+                      return;
+                    };
+
+                    fw.truncate(file.offset);
+                  } else {
+                    fw.seek(0);
+                    file.abortAllResumeData();
+                  }
+                }
+
+                successCallback({
+                  fileEntry: fileEntry,
+                  fileWriter: fw
+                });
               });
             });
           });
@@ -2457,6 +2562,7 @@ function () {
     this.blobList = void 0;
     this.onwriteend = void 0;
     this.onerror = void 0;
+    this.position = 0;
 
     if (MSIE) {
       this.blobList = new MSBlobBuilder();
@@ -2512,7 +2618,7 @@ var SavvyFile =
 /*#__PURE__*/
 function () {
   // measure unit is byte per second
-  function SavvyFile(path, name, fileSize, chunkSize, IO_instance, progressHandle) {
+  function SavvyFile(path, name, fileSize, chunkSize, IO_instance, progressHandle, buffacc, offset) {
     var _this = this;
 
     classCallCheck(this, SavvyFile);
@@ -2544,6 +2650,7 @@ function () {
         _this.IO.getFileWriter(_this, function (result) {
           _this.fileWriter = result.fileWriter;
           _this.fileEntry = result.fileEntry;
+          console.log(result.fileWriter.position);
 
           if (_this.status !== 'abort') {
             _this.status = 'inited';
@@ -2552,6 +2659,10 @@ function () {
           resolve();
         }, reject);
       });
+    };
+
+    this.getStatus = function () {
+      return _this.status;
     };
 
     this.update = function (length) {
@@ -2569,6 +2680,8 @@ function () {
     this.chunkSize = chunkSize;
     this.IO = IO_instance;
     this.remainSize = fileSize;
+    this.bufferAcc = buffacc || 0;
+    this.offset = offset || 0;
     this.progressHandle = progressHandle;
     this.fileType = filetype(this.name);
     this.id = new Date().getTime();
@@ -2620,6 +2733,10 @@ function () {
   function SavvyZipFile(files, name, IO_instance, progressHandle) {
     var _this = this;
 
+    var chunkIndex = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : 0;
+    var id = arguments.length > 5 ? arguments[5] : undefined;
+    var offset = arguments.length > 6 ? arguments[6] : undefined;
+
     classCallCheck(this, SavvyZipFile);
 
     this.id = void 0;
@@ -2647,6 +2764,7 @@ function () {
         _this.IO.getFileWriter(_this, function (result) {
           _this.fileWriter = result.fileWriter;
           _this.fileEntry = result.fileEntry;
+          console.log('fileWriter position' + result.fileWriter.position);
 
           if (_this.status !== 'abort') {
             _this.status = 'inited';
@@ -2655,6 +2773,10 @@ function () {
           resolve();
         }, reject);
       });
+    };
+
+    this.getStatus = function () {
+      return _this.status;
     };
 
     this.update = function (length) {
@@ -2671,12 +2793,13 @@ function () {
     this.name = name;
     this.files = files;
     this.fileType = filetype(this.name);
-    this.id = new Date().getTime();
+    this.id = id || new Date().getTime();
+    this.offset = offset || 0;
     this.totalSize = files.reduce(function (prev, cur) {
       return prev + cur.fileSize;
     }, 0);
     this.progressHandle = progressHandle;
-    this.remainSize = this.totalSize;
+    this.nowChunkIndex = chunkIndex;
 
     for (var i = 0, l = files.length; i < l; i++) {
       this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length
@@ -2695,9 +2818,35 @@ function () {
     this.chunklist = files.reduce(function (pre, file) {
       return pre.concat(file.chunklist);
     }, []);
+
+    if (chunkIndex === this.chunklist.length) {
+      this.remainSize = 0;
+    } else if (chunkIndex !== 0) {
+      this.remainSize = this.totalSize - this.chunklist.reduce(function (acc, cur, index) {
+        if (index < chunkIndex) {
+          acc += cur.end - (cur.start === 0 ? 0 : cur.start - 1);
+        } else {
+          acc += 0;
+        }
+
+        return acc;
+      }, 0);
+    } else {
+      this.remainSize = this.totalSize;
+    }
   }
 
   createClass(SavvyZipFile, [{
+    key: "abortAllResumeData",
+    value: function abortAllResumeData() {
+      this.nowChunkIndex = 0;
+      this.remainSize = this.totalSize;
+      this.offset = 0;
+      this.files.forEach(function (file) {
+        file.offset = file.bufferAcc = 0;
+      });
+    }
+  }, {
     key: "nextChunk",
     value: function nextChunk() {
       this.startTime = new Date().getTime(); // make sure next chunk is available when status not chunk_empty
@@ -2756,20 +2905,44 @@ function () {
     this.running = false;
     this.freeze = false;
     this.files = [];
+    this.schedulingFiles = [];
 
-    this.schedule = function () {
+    this.schedule = function (ids) {
       if (!_this.freeze) {
-        _this.running = true;
+        if (!_this.running) {
+          _this.running = true;
 
-        var currentFile = _this.files.find(function (file) {
-          return file.status !== 'complete' && file.status !== 'abort';
-        });
+          if (_this.schedulingFiles.length <= 0) {
+            if (ids) {
+              _this.schedulingFiles = ids.map(function (id) {
+                return _this.files.find(function (file) {
+                  return file.id === id;
+                });
+              });
+            } else {
+              _this.schedulingFiles = _this.files;
+            }
+          }
 
-        if (currentFile) {
-          _this.processCurrentFile(currentFile);
-        } else {
-          console.log('all files are in complete state, transfer stop.');
-          _this.running = false;
+          var currentFile = _this.schedulingFiles.find(function (file) {
+            return file && file.status !== 'complete' && file.status !== 'abort' || false;
+          });
+
+          if (currentFile) {
+            _this.processCurrentFile(currentFile);
+          } else {
+            console.log('all files are in complete state, transfer stop.');
+            _this.schedulingFiles = [];
+            _this.running = false;
+          }
+        } else if (ids) {
+          var _this$schedulingFiles;
+
+          (_this$schedulingFiles = _this.schedulingFiles).push.apply(_this$schedulingFiles, toConsumableArray(ids.map(function (id) {
+            return _this.files.find(function (file) {
+              return file.id === id;
+            });
+          })));
         }
       }
     };
@@ -2786,42 +2959,51 @@ function () {
             switch (_context.prev = _context.next) {
               case 0:
                 if (_this.freeze) {
-                  _context.next = 33;
+                  _context.next = 43;
                   break;
                 }
 
-                if (!(file.status === 'abort')) {
-                  _context.next = 4;
+                if (!(file.getStatus() === 'abort')) {
+                  _context.next = 5;
                   break;
                 }
+
+                _this.running = false;
 
                 _this.schedule();
 
                 return _context.abrupt("return");
 
-              case 4:
-                if (!(file.status === 'initializing')) {
-                  _context.next = 9;
+              case 5:
+                if (!(file.getStatus() === 'initializing')) {
+                  _context.next = 12;
                   break;
                 }
 
-                _context.next = 7;
+                console.log('need init');
+                _context.next = 9;
                 return file.init();
 
-              case 7:
+              case 9:
+                _this.running = false;
+
                 _this.schedule();
 
                 return _context.abrupt("return");
 
-              case 9:
-                if (!(file.status === 'chunk_empty')) {
-                  _context.next = 14;
+              case 12:
+                if (!(file.getStatus() === 'chunk_empty')) {
+                  _context.next = 19;
                   break;
                 }
 
                 _this.IO.download([file]);
 
-                file.status = 'complete'; // start download next file
+                file.status = 'complete';
+
+                _this.storeFileForResume();
+
+                _this.running = false; // start download next file
 
                 _this.schedule(); // this place may also need a update.
                 // file.update()
@@ -2829,10 +3011,10 @@ function () {
 
                 return _context.abrupt("return");
 
-              case 14:
+              case 19:
                 // file.status should be inited
                 nextChunk = file.nextChunk();
-                _context.next = 17;
+                _context.next = 22;
                 return fetch(nextChunk.filePath, {
                   method: 'GET',
                   headers: {
@@ -2840,24 +3022,8 @@ function () {
                   }
                 });
 
-              case 17:
+              case 22:
                 response = _context.sent;
-
-                if (!_this.freeze) {
-                  _context.next = 21;
-                  break;
-                }
-
-                // throw this chunk
-                file.resumePreChunk();
-                return _context.abrupt("return");
-
-              case 21:
-                _context.next = 23;
-                return response.arrayBuffer();
-
-              case 23:
-                buffer = _context.sent;
 
                 if (!_this.freeze) {
                   _context.next = 27;
@@ -2866,26 +3032,49 @@ function () {
 
                 // throw this chunk
                 file.resumePreChunk();
+                _this.running = false;
                 return _context.abrupt("return");
 
               case 27:
-                if (!(file.status !== 'abort')) {
-                  _context.next = 32;
+                _context.next = 29;
+                return response.arrayBuffer();
+
+              case 29:
+                buffer = _context.sent;
+
+                if (!_this.freeze) {
+                  _context.next = 34;
                   break;
                 }
 
-                _context.next = 30;
+                // throw this chunk
+                file.resumePreChunk();
+                _this.running = false;
+                return _context.abrupt("return");
+
+              case 34:
+                if (!(file.getStatus() !== 'abort')) {
+                  _context.next = 42;
+                  break;
+                }
+
+                _context.next = 37;
                 return _this.IO.write(file, buffer);
 
-              case 30:
+              case 37:
                 file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
+                console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+
+                _this.storeFileForResume();
+
+                _this.running = false;
 
                 _this.schedule();
 
-              case 32:
+              case 42:
                 return _context.abrupt("return");
 
-              case 33:
+              case 43:
               case "end":
                 return _context.stop();
             }
@@ -2905,20 +3094,98 @@ function () {
     }
 
     this.progressHandle = onProgress;
-    this.files = new Proxy(this.files, {
-      set: function set(target, property, value, receiver) {
+    /* this.files = new Proxy(this.files, {
+      set: (target: any, property: any, value: any, receiver: any): boolean => {
         target[property] = value;
-
-        if (property === 'length' && value > 0 && !_this.running) {
-          _this.schedule();
+        if (property === 'length' && value > 0 && !this.running) {
+          this.schedule();
         }
-
         return true;
       }
-    });
+    }); */
+
   }
+  /**
+   * resumeData: []{
+   *  id: number,
+   *  name: string,
+   *  type: string = 'zip',
+   *  files: []{
+   *    name: string,
+   *    path: string,
+   *    size: number
+   *  },
+   *  chunkIndex: number,
+   *  tag: number //0: downloading, 1: complete
+   * }
+   */
+
 
   createClass(SavvyTransfer, [{
+    key: "retrieveFilesFromLocalStorage",
+    value: function retrieveFilesFromLocalStorage() {
+      var _this2 = this;
+
+      var rawResumeData = window.localStorage.getItem('savvy_transfers');
+
+      if (rawResumeData) {
+        var resumeData;
+
+        try {
+          var _this$files;
+
+          resumeData = JSON.parse(rawResumeData);
+
+          (_this$files = this.files).push.apply(_this$files, toConsumableArray(resumeData.map(function (data) {
+            if (data.type === 'zip') {
+              return new SavvyZipFile(data.files.map(function (_file) {
+                return new SavvyFile(_file.path, _file.name, _file.size, SavvyTransfer.CHUNK_SIZE, _this2.IO, _this2.progressHandle, _file.bufferAcc, _file.offset);
+              }), data.name, _this2.IO, _this2.progressHandle, data.chunkIndex, data.id, data.offset);
+            } else {
+              return new SavvyFile(data.path, data.name, data.size, SavvyTransfer.CHUNK_SIZE, _this2.IO, _this2.progressHandle);
+            }
+          })));
+        } catch (e) {
+          console.log(e);
+        }
+      }
+
+      return this.files;
+    }
+    /**
+     * resumeData@type TResumeData
+     */
+
+  }, {
+    key: "storeFileForResume",
+    value: function storeFileForResume() {
+      var tmpResumeData = [];
+      this.files.forEach(function (file) {
+        if (file.status !== 'abort' && file.status !== 'complete') {
+          tmpResumeData.push({
+            id: file.id,
+            name: file.name,
+            type: 'zip',
+            chunkIndex: file.nowChunkIndex,
+            tag: file.nowChunkIndex === file.chunklist.length ? 1 : 0,
+            offset: file.offset,
+            dirData: file.dirData,
+            files: file.files.map(function (_file) {
+              return {
+                name: _file.name,
+                path: _file.filePath,
+                size: _file.fileSize,
+                bufferAcc: _file.bufferAcc,
+                offset: _file.offset
+              };
+            })
+          });
+        }
+      });
+      window.localStorage.setItem('savvy_transfers', JSON.stringify(tmpResumeData));
+    } // temporary just on type - zip
+
+  }, {
     key: "addFiles",
     value: function () {
       var _addFiles = asyncToGenerator(
@@ -2961,15 +3228,22 @@ function () {
                 break;
 
               case 11:
-                if (asZip) {
-                  // create a zip file
-                  tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
-                  this.files.push(tmpZipFile);
+                if (!asZip) {
+                  _context2.next = 18;
+                  break;
                 }
 
-                return _context2.abrupt("return", this.files);
+                // create a zip file
+                tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
+                this.files.push(tmpZipFile); // store in locastorage for resume
 
-              case 13:
+                this.storeFileForResume();
+                return _context2.abrupt("return", tmpZipFile);
+
+              case 18:
+                return _context2.abrupt("return", tmpFiles);
+
+              case 19:
               case "end":
                 return _context2.stop();
             }
@@ -3030,10 +3304,8 @@ function () {
   }, {
     key: "resume",
     value: function resume() {
-      if (this.running) {
-        this.freeze = false;
-        this.schedule();
-      }
+      this.freeze = false;
+      this.schedule();
     }
   }, {
     key: "removeFile",
@@ -3047,6 +3319,7 @@ function () {
         tmpFile.status = 'abort';
       }
 
+      this.storeFileForResume();
       this.resume();
       return tmpFile;
     }

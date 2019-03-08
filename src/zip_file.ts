@@ -4,6 +4,7 @@ import MemoryIO from './methods/memory';
 import SavvyFile from './file';
 
 import { filetype } from './utils';
+import SavvyTransfer from '.';
 
 export default class SavvyZipFile {
   public id: number;
@@ -19,7 +20,7 @@ export default class SavvyZipFile {
   public fileSize: number = 0;
   public totalSize: number;
 
-  private files: SavvyFile[];
+  public files: SavvyFile[];
   public nowChunkIndex: number = 0;
   private IO: FilesystemIO | MemoryIO;
 
@@ -35,7 +36,7 @@ export default class SavvyZipFile {
 
   public fileType: string = 'File';
 
-  constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function) {
+  constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number) {
     this.status = 'initializing';
     this.IO = IO_instance;
     this.name = name;
@@ -43,12 +44,13 @@ export default class SavvyZipFile {
 
     this.fileType = filetype(this.name);
 
-    this.id = new Date().getTime();
+    this.id = id || new Date().getTime();
+    this.offset = offset || 0;
 
     this.totalSize = files.reduce((prev: number, cur: SavvyFile) => prev + cur.fileSize, 0);
     this.progressHandle = progressHandle;
 
-    this.remainSize = this.totalSize;
+    this.nowChunkIndex = chunkIndex;
 
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length /* header */ + 46 + files[i].name.length /* dirRecord */;
@@ -62,6 +64,24 @@ export default class SavvyZipFile {
     this.fileSize += 98;
 
     this.chunklist = files.reduce((pre: TChunk[], file: SavvyFile) => pre.concat(file.chunklist), []);
+
+    if (chunkIndex === this.chunklist.length) {
+      this.remainSize = 0;
+    } else if (chunkIndex !== 0) {
+      this.remainSize =
+        this.totalSize -
+        this.chunklist.reduce((acc: number, cur: TChunk, index: number) => {
+          if (index < chunkIndex) {
+            acc += cur.end - (cur.start === 0 ? 0 : cur.start - 1);
+          } else {
+            acc += 0;
+          }
+
+          return acc;
+        }, 0);
+    } else {
+      this.remainSize = this.totalSize;
+    }
   }
   public init = (): Promise<undefined> => {
     return new Promise((resolve: Function, reject: Function) => {
@@ -70,7 +90,7 @@ export default class SavvyZipFile {
         (result: { fileEntry: FileEntry; fileWriter: FileWriter }) => {
           this.fileWriter = result.fileWriter;
           this.fileEntry = result.fileEntry;
-
+          console.log('fileWriter position' + result.fileWriter.position);
           if (this.status !== 'abort') {
             this.status = 'inited';
           }
@@ -80,6 +100,15 @@ export default class SavvyZipFile {
       );
     });
   };
+
+  public abortAllResumeData() {
+    this.nowChunkIndex = 0;
+    this.remainSize = this.totalSize;
+    this.offset = 0;
+    this.files.forEach((file: SavvyFile) => {
+      file.offset = file.bufferAcc = 0;
+    });
+  }
 
   public get currentFile(): SavvyFile {
     let tmpNowChunkIndex = this.nowChunkIndex - 1;
@@ -95,6 +124,9 @@ export default class SavvyZipFile {
     }
     return tmpNowFile;
   }
+  public getStatus = (): TStatus => {
+    return this.status;
+  };
   public update = (length: number) => {
     let tmpEndTime: number = new Date().getTime();
     let duration: number = tmpEndTime - this.startTime;

@@ -35,7 +35,7 @@ export default class SavvyFile {
 
   private progressHandle: Function;
 
-  constructor(path: string, name: string, fileSize: number, chunkSize: number, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function) {
+  constructor(path: string, name: string, fileSize: number, chunkSize: number, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, buffacc?: number, offset?: number) {
     this.status = 'initializing';
     this.filePath = path;
     this.name = name;
@@ -44,6 +44,9 @@ export default class SavvyFile {
     this.IO = IO_instance;
 
     this.remainSize = fileSize;
+
+    this.bufferAcc = buffacc || 0;
+    this.offset = offset || 0;
 
     this.progressHandle = progressHandle;
     this.fileType = filetype(this.name);
@@ -72,6 +75,8 @@ export default class SavvyFile {
           this.fileWriter = result.fileWriter;
           this.fileEntry = result.fileEntry;
 
+          console.log(result.fileWriter.position);
+
           if (this.status !== 'abort') {
             this.status = 'inited';
           }
@@ -81,6 +86,10 @@ export default class SavvyFile {
         reject
       );
     });
+  };
+
+  public getStatus = (): TStatus => {
+    return this.status;
   };
 
   public update = (length: number) => {
