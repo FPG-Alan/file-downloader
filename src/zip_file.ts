@@ -36,7 +36,11 @@ export default class SavvyZipFile {
 
   public fileType: string = 'File';
 
-  constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number) {
+  public resumed: boolean = false;
+
+  public lock: boolean = false;
+
+  constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number, resumed?: boolean) {
     this.status = 'initializing';
     this.IO = IO_instance;
     this.name = name;
@@ -64,6 +68,8 @@ export default class SavvyZipFile {
     this.fileSize += 98;
 
     this.chunklist = files.reduce((pre: TChunk[], file: SavvyFile) => pre.concat(file.chunklist), []);
+
+    this.resumed = resumed || false;
 
     if (chunkIndex === this.chunklist.length) {
       this.remainSize = 0;
@@ -128,6 +134,10 @@ export default class SavvyZipFile {
     return this.status;
   };
   public update = (length: number) => {
+    if (this.status === 'inited') {
+      this.status = 'downloading';
+    }
+
     let tmpEndTime: number = new Date().getTime();
     let duration: number = tmpEndTime - this.startTime;
 
@@ -135,7 +145,7 @@ export default class SavvyZipFile {
     this.speed = (length / duration) * 1000;
     this.remainSize -= length;
 
-    this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize);
+    this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize, this.status);
   };
   public nextChunk(): TChunk {
     this.startTime = new Date().getTime();
@@ -150,7 +160,7 @@ export default class SavvyZipFile {
 
   public resumePreChunk(): void {
     if (this.status === 'chunk_empty') {
-      this.status = 'inited';
+      this.status = 'downloading';
     }
 
     this.nowChunkIndex -= 1;

@@ -11,6 +11,8 @@ export default class MemoryIO extends IO {
 
   constructor() {
     super();
+
+    console.log('memory download init...');
   }
   public getFileWriter(file: SavvyFile | SavvyZipFile, successCallback: Function, errorCallback: Function): void {
     successCallback({
@@ -41,7 +43,7 @@ export default class MemoryIO extends IO {
       }
     });
   }
-
+  public deleteFile(file: SavvyFile | SavvyZipFile): void {}
   public download(files: Array<SavvyFile | SavvyZipFile>): void {
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       let blob: Blob = files[i].fileWriter.getBlob(files[i].name);
@@ -50,10 +52,12 @@ export default class MemoryIO extends IO {
         navigator.msSaveOrOpenBlob(blob, name);
       } else {
         blob_url = window.URL.createObjectURL(blob);
-
         let dlLinkNode: HTMLAnchorElement = document.createElement('a');
         dlLinkNode.download = files[i].name;
         dlLinkNode.href = blob_url;
+
+        console.log(dlLinkNode);
+        document.body.appendChild(dlLinkNode);
 
         // this click may triggers beforeunload...
         dlLinkNode.click();

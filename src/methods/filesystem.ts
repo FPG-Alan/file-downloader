@@ -9,6 +9,10 @@ const TEMPORARY: number = 0;
 const PERSISTENT: number = 1;
 
 export default class FilesystemIO extends IO {
+  private freeSpaceRequest: boolean = false;
+  private entrtiesReaded: boolean = false;
+  private allEntries: Entry[] = [];
+  private allResumeFiles: Array<SavvyFile | SavvyZipFile> = [];
   constructor() {
     super();
     customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem;
@@ -22,6 +26,11 @@ export default class FilesystemIO extends IO {
         dirReader.readEntries((entries: Entry[]) => {
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
           console.log(entries);
+          this.allEntries = entries;
+          this.entrtiesReaded = true;
+          if (this.freeSpaceRequest) {
+            this.freeSpace(this.allResumeFiles);
+          }
           /* entries.map((entry: Entry) => {
             entry.remove(() => {
               console.log('remove file [' + entry.name + '] from filesystem successful.');
@@ -81,15 +90,15 @@ export default class FilesystemIO extends IO {
       fs.root.getDirectory('savvy', { create: true }, (directoryEntry: DirectoryEntry) => {
         fs.root.getFile('savvy/' + file.name + file.id, { create: true }, (fileEntry: FileEntry) => {
           fileEntry.getMetadata((metadata: Metadata) => {
-            console.log(metadata);
+            // console.log(metadata);
             fileEntry.createWriter((fw: FileWriter) => {
               if (metadata.size && metadata.size !== 0) {
                 // set offset as file size, the plus op may not effective
                 if (file.offset === metadata.size) {
-                  console.log(file.offset, metadata.size);
+                  // console.log(file.offset, metadata.size);
                   fw.seek(file.offset + 1);
                 } else if (file.offset < metadata.size) {
-                  console.log(file.offset + ' ,' + metadata.size + ' - finally find u!');
+                  // console.log(file.offset + ' ,' + metadata.size + ' - finally find u!');
                   fw.onwriteend = () => {
                     fw.seek(file.offset + 1);
                     successCallback({
@@ -117,71 +126,25 @@ export default class FilesystemIO extends IO {
       });
     });
   }
-  /* private handleFileWriteStart = (event: ProgressEvent): void => {
-    console.log(event);
-
-    this.writing = true;
-  };
-  private handleFileWriteProgress = (event: ProgressEvent): void => {
-    console.log(event);
-  };
-  private handleFileWriteError = (event: ProgressEvent): void => {
-    console.log(event);
-
-    this.writing = false;
-  };
-  private handleFileWriteEnd = (event: ProgressEvent): void => {
-    console.log(event);
-    console.log(this.fileWriter!.position);
-    this.writing = false;
-
-    if (this.writeEndResolve) {
-      this.writeEndResolve();
-
-      this.writeEndReject = null;
-      this.writeEndResolve = null;
-    }
-  }; */
-  // Try to free space before starting the download.
-  // 需要考虑是否存在当前有文件正在从沙盒环境写入本地文件系统, 在这个过程中不能删除这个空间.
-  private free_space(callback: Function, ms: number, delta: any): void {}
-
-  private createTmpFile(): Promise<FileEntry> {
-    let tmpFileName: string = 'tmp.zip';
-
-    return new Promise((resolve: Function, reject: Function) => {
-      customWindow.requestFileSystem(TEMPORARY, 4 * 1024 * 1024 * 1024, (fs: FileSystem) => {
-        fs.root.getFile(
-          tmpFileName,
-          undefined,
-          (file: FileEntry) => {
-            file.remove(
-              () => {
-                this.create(fs, tmpFileName, resolve, reject);
-              },
-              () => {
-                this.create(fs, tmpFileName, resolve, reject);
-              }
-            );
-          },
-          () => {
-            this.create(fs, tmpFileName, resolve, reject);
-          }
-        );
+  public freeSpace(files: Array<SavvyFile | SavvyZipFile>): void {
+    if (this.entrtiesReaded) {
+      this.freeSpaceRequest = false;
+      this.allEntries.forEach((entry: Entry) => {
+        let tmpFile: SavvyFile | SavvyZipFile | undefined = files.find((file: SavvyFile | SavvyZipFile) => file.name + file.id === entry.name);
+        // this file need be remove.
+        if (tmpFile === undefined) {
+          entry.remove(
+            () => {
+              console.log(entry.name + ' removed.');
+            },
+            (err: DOMError) => {}
+          );
+        }
       });
-    });
-  }
-  private create(fs: FileSystem, tmpFileName: string, resolve: Function, reject: Function): void {
-    fs.root.getFile(
-      tmpFileName,
-      { create: true },
-      (tmpFile: FileEntry) => {
-        resolve(tmpFile);
-      },
-      () => {
-        reject();
-      }
-    );
+    } else {
+      this.allResumeFiles = files;
+      this.freeSpaceRequest = true;
+    }
   }
   /**
    * @param {SavvyFile} file
@@ -215,6 +178,37 @@ export default class FilesystemIO extends IO {
       }
     });
   }
+  /**
+   * do not delete file while it's being copied from FS to DL folder
+   * conservative assumption that a file is being written at 1024 bytes per ms
+   * add 30000 ms margin
+   */
+  public deleteFile(file: SavvyFile | SavvyZipFile): void {
+    // let assume
+    if (file.fileEntry) {
+      let _file = file.fileEntry as FileEntry;
+      if (_file.isFile) {
+        _file.getMetadata(
+          (metadata: Metadata) => {
+            let delTime: number = metadata.size / 1024 + 30000;
+            setTimeout(() => {
+              _file.remove(() => {
+                console.log('file ' + file.name + ' being removed from filesystem...');
+              });
+            }, delTime);
+          },
+          (err: DOMError) => {
+            console.log(err);
+          }
+        );
+      }
+      /* (file.fileEntry as FileEntry).file((_file: File) =>{
+        _file.get
+      }, (err: DOMError) =>{
+        console.log(err);
+      }) */
+    }
+  }
 
   /**
    * @param {SavvyFile}File
@@ -242,64 +236,6 @@ export default class FilesystemIO extends IO {
       }
     }
   }
-
-  /* private async downloadAsZip(files: SavvyFile[]): Promise<undefined> {
-    // create a tmpFile for zip buffer.
-    let tmpZipFile: FileEntry = await this.createTmpFile();
-
-    let totalFileSize: number = files.reduce((prev: number, cur: SavvyFile, curIndex: number, arr: SavvyFile[]) => prev + cur.fileSize, 0);
-
-    // creative a zip writer(a zip writer need a reader to provide data, and a writer to writer zip data to zip file.)
-    let writer: FileWriter = await new Promise((resolve: Function, reject: Function) => {
-      tmpZipFile.createWriter(
-        (fileWriter: FileWriter) => {
-          resolve(fileWriter);
-        },
-        () => {
-          reject();
-        }
-      );
-    });
-
-    let zipWriter: ZipWriter = createZipWriter(writer);
-
-    // add all files into zip writer, and writer to fs://root/tmp.zip
-    for (let i: number = 0, l: number = files.length; i < l; i++) {
-      // get File Obj
-      // TO-DO: stupid thing is, we use Filesystem to store the file but at here we read it to memory again!
-      // WHATEVER SOMETHING MUST BE FOUND TO SOLVE THIS SHIT!
-      let tmpFile: File = await new Promise((resolve: FileCallback, reject: ErrorCallback) => {
-        (files[i].fileEntry as FileEntry).file(resolve, reject);
-      });
-      await zipWriter.add(files[i].name, new BlobReader(tmpFile), files[i].fileSize, totalFileSize, i === l - 1);
-    }
-
-    // download this zip file
-    if (typeof tmpZipFile.file === 'function') {
-      try {
-        tmpZipFile.file(
-          (file: File) => {
-            console.log(file);
-            let _file: File = new File([file], 'tmp.zip', {
-              type: filemime('tmp.zip')
-            });
-
-            this.saveLink(new SavvyFile('', 'tmp.zip', 0, 0, this), window.URL.createObjectURL(_file));
-            // this.saveFile(files[0], file);
-          },
-          () => {
-            this.saveLink(files[0]);
-          }
-        );
-      } catch (e) {
-        console.log(e);
-      }
-    } else {
-      this.saveLink(files[0]);
-    }
-
-    return;
-  } */
   /**
    * @param {SavvyFile}file
    * @param {String?}objectURL

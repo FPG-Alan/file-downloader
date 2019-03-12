@@ -35,6 +35,8 @@ export default class SavvyFile {
 
   private progressHandle: Function;
 
+  public lock: boolean = false;
+
   constructor(path: string, name: string, fileSize: number, chunkSize: number, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, buffacc?: number, offset?: number) {
     this.status = 'initializing';
     this.filePath = path;
@@ -93,12 +95,15 @@ export default class SavvyFile {
   };
 
   public update = (length: number) => {
+    if (this.status === 'inited') {
+      this.status = 'downloading';
+    }
     let duration: number = new Date().getTime() - this.startTime;
 
     this.speed = (length / duration) * 1000;
     this.remainSize -= length;
 
-    this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize);
+    this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize, this.status);
   };
 
   public nextChunk(): TChunk {
