@@ -39,6 +39,8 @@ export default class SavvyZipFile {
   public resumed: boolean = false;
 
   public lock: boolean = false;
+  public processer: any = null;
+  public paused: boolean = false;
 
   constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number, resumed?: boolean) {
     this.status = 'initializing';

@@ -36,6 +36,8 @@ export default class SavvyFile {
   private progressHandle: Function;
 
   public lock: boolean = false;
+  public processer: any = null;
+  public paused: boolean = false;
 
   constructor(path: string, name: string, fileSize: number, chunkSize: number, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, buffacc?: number, offset?: number) {
     this.status = 'initializing';

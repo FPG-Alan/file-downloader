@@ -2610,6 +2610,8 @@
 	    this.fileType = 'File';
 	    this.progressHandle = void 0;
 	    this.lock = false;
+	    this.processer = null;
+	    this.paused = false;
 
 	    this.init = function () {
 	      return new Promise(function (resolve, reject) {
@@ -2731,6 +2733,8 @@
 	    this.fileType = 'File';
 	    this.resumed = false;
 	    this.lock = false;
+	    this.processer = null;
+	    this.paused = false;
 
 	    this.init = function () {
 	      return new Promise(function (resolve, reject) {
@@ -2873,7 +2877,7 @@
 	var SavvyTransfer =
 	/*#__PURE__*/
 	function () {
-	  function SavvyTransfer(onProgress) {
+	  function SavvyTransfer(onProgress, onStatusUpdate) {
 	    var _this = this;
 
 	    classCallCheck(this, SavvyTransfer);
@@ -2881,8 +2885,8 @@
 	    this.IO = void 0;
 	    this.IO_IS_FS = false;
 	    this.progressHandle = void 0;
+	    this.statusUpdateHandle = void 0;
 	    this.running = false;
-	    this.freeze = false;
 	    this.files = [];
 	    this.schedulingFiles = [];
 	    this.processers = [];
@@ -2903,6 +2907,10 @@
 	        if (tmpSavvyFile && _this.schedulingFiles.filter(function (file) {
 	          return file.id === nonRepeatIds[i];
 	        }).length <= 0) {
+	          tmpSavvyFile.status = 'queue';
+
+	          _this.statusUpdateHandle(tmpSavvyFile.id, 'queue', false, false);
+
 	          _this.schedulingFiles.push(tmpSavvyFile);
 	        }
 	      };
@@ -2922,24 +2930,14 @@
 	    }
 
 	    this.progressHandle = onProgress;
+	    this.statusUpdateHandle = onStatusUpdate;
 
 	    this.processers = new Array(SavvyTransfer.HTTP_NUM).fill('').map(function (_) {
 	      return new Processer();
 	    });
 	  }
 	  /**
-	   * resumeData: []{
-	   *  id: number,
-	   *  name: string,
-	   *  type: string = 'zip',
-	   *  files: []{
-	   *    name: string,
-	   *    path: string,
-	   *    size: number
-	   *  },
-	   *  chunkIndex: number,
-	   *  tag: number //0: downloading, 1: complete
-	   * }
+	   * resumeData@type TResumeData
 	   */
 
 
@@ -2981,7 +2979,7 @@
 	    }
 	    /**
 	     * resumeData@type TResumeData
-	     * @param {SavvyZipFile} fileForUpdate
+	     * @param {SavvyZipFile | SavvyFile} fileForUpdate
 	     */
 
 	  }, {
@@ -3040,6 +3038,11 @@
 
 	      window.localStorage.setItem('savvy_transfers', JSON.stringify(newResumeData));
 	    }
+	    /**
+	     * resumeData@type TResumeData
+	     * @param {SavvyZipFile | SavvyFile} fileNeedDelete
+	     */
+
 	  }, {
 	    key: "deleteFileFromStore",
 	    value: function deleteFileFromStore(fileNeedDelete) {
@@ -3167,43 +3170,6 @@
 
 	      return addFile;
 	    }()
-	    /**
-	     * pause all process
-	     */
-
-	  }, {
-	    key: "pause",
-	    value: function pause() {
-	      if (this.running) {
-	        this.freeze = true;
-	        return true;
-	      }
-
-	      return false;
-	    }
-	  }, {
-	    key: "resume",
-	    value: function resume() {
-	      this.freeze = false; // this.schedule();
-
-	      this.distributeToProcessers();
-	    }
-	  }, {
-	    key: "removeFile",
-	    value: function removeFile(id) {
-	      this.pause();
-	      var tmpFile = this.files.find(function (file) {
-	        return file.id === id;
-	      });
-
-	      if (tmpFile) {
-	        tmpFile.status = 'abort';
-	        this.deleteFileFromStore(tmpFile);
-	      }
-
-	      this.resume();
-	      return tmpFile;
-	    }
 	  }, {
 	    key: "_addFile",
 	    value: function () {
@@ -3288,8 +3254,110 @@
 
 	      return _addFile;
 	    }()
+	    /**
+	     * @param {number[]} ids
+	     * pause files' processers which id within ids
+	     */
+
+	  }, {
+	    key: "pause",
+	    value: function pause(ids) {
+	      var _this3 = this;
+
+	      if (this.running) {
+	        ids.map(function (id) {
+	          var tmpFile = _this3.files.find(function (file) {
+	            return file.id === id;
+	          }); // some file in ids may had being resumed.
+	          // we just need care about those files which have freezed processors.
+
+
+	          if (tmpFile && tmpFile.processer && !tmpFile.processer.freeze) {
+	            tmpFile.processer.freeze = true;
+	          } else if (tmpFile && !tmpFile.processer) {
+	            tmpFile.paused = true;
+
+	            _this3.statusUpdateHandle(tmpFile.id, tmpFile.status, true, false);
+	          }
+	        });
+	        return true;
+	      }
+
+	      return false;
+	    }
+	    /**
+	     * @param {number[]} ids
+	     * resume files' processers which id within ids.
+	     */
+
+	  }, {
+	    key: "resume",
+	    value: function resume(ids) {
+	      var _this4 = this;
+
+	      console.log(ids);
+	      ids.map(function (id) {
+	        var tmpFile = _this4.files.find(function (file) {
+	          return file.id === id;
+	        }); // some file in ids may had being resumed.
+	        // we just need care about those files which have freezed processors.
+
+
+	        if (tmpFile && tmpFile.processer && tmpFile.processer.freeze) {
+	          tmpFile.processer.freeze = false;
+	          tmpFile.processer.run(tmpFile, _this4);
+	        } else if (tmpFile && !tmpFile.processer && tmpFile.status !== 'abort' && tmpFile.status !== 'complete') {
+	          // 安排!
+	          console.log('schedule ' + tmpFile.id);
+
+	          _this4.schedule([tmpFile.id]);
+	        }
+	      });
+	    }
+	    /**
+	     * @param {number} id
+	     * @returns SavvyFile | SavvyZipFile | undefined
+	     * remove file
+	     * 1. pause its processor if there has one.
+	     * 2. release the processor resource.
+	     * 3. delete its record in LocalStorage.
+	     */
+
+	  }, {
+	    key: "removeFile",
+	    value: function removeFile(id) {
+	      var tmpFile = this.files.find(function (file) {
+	        return file.id === id;
+	      });
+
+	      if (tmpFile) {
+	        if (tmpFile.processer) {
+	          tmpFile.processer.freeze = true;
+	          tmpFile.processer.file = null;
+	          tmpFile.processer.idle = true;
+	          tmpFile.processer = null;
+	          tmpFile.lock = false;
+	        }
+
+	        tmpFile.status = 'abort';
+	        this.deleteFileFromStore(tmpFile);
+	      }
+
+	      return tmpFile;
+	    }
+	    /**
+	     * @param {number[]?} ids
+	     * get files which id within ids, deduplication and then push into <schedulingFiles>
+	     */
+
 	  }, {
 	    key: "distributeToProcessers",
+
+	    /**
+	     * query the current idle state of all processors
+	     * distribute a file which is **not complete** and **not abort** and **not locked**
+	     * to a processor in idle state.
+	     */
 	    value: function distributeToProcessers() {
 	      if (this.schedulingFiles.length > 0) {
 	        this.running = true;
@@ -3323,11 +3391,13 @@
 	/*#__PURE__*/
 	function () {
 	  function Processer() {
-	    var _this3 = this;
+	    var _this5 = this;
 
 	    classCallCheck(this, Processer);
 
 	    this.idle = true;
+	    this.freeze = false;
+	    this.file = null;
 
 	    this.process =
 	    /*#__PURE__*/
@@ -3340,16 +3410,13 @@
 	          while (1) {
 	            switch (_context4.prev = _context4.next) {
 	              case 0:
-	                if (scheduler.freeze) {
-	                  _context4.next = 51;
+	                if (_this5.freeze) {
+	                  _context4.next = 54;
 	                  break;
 	                }
 
-	                _this3.idle = false;
-	                file.lock = true;
-
 	                if (!(file.getStatus() === 'abort')) {
-	                  _context4.next = 9;
+	                  _context4.next = 10;
 	                  break;
 	                }
 
@@ -3357,14 +3424,17 @@
 	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
 	                  return _file.id === file.id;
 	                }), 1);
-	                _this3.idle = true;
+	                _this5.idle = true;
+	                _this5.file = null;
 	                file.lock = false;
+	                file.processer = null;
+	                scheduler.statusUpdateHandle(file.id, 'abort', false, false);
 	                scheduler.distributeToProcessers();
 	                return _context4.abrupt("return");
 
-	              case 9:
+	              case 10:
 	                if (!(file.getStatus() === 'chunk_empty')) {
-	                  _context4.next = 19;
+	                  _context4.next = 23;
 	                  break;
 	                }
 
@@ -3376,30 +3446,32 @@
 	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
 	                  return _file.id === file.id;
 	                }), 1);
-	                _this3.idle = true;
+	                _this5.idle = true;
+	                _this5.file = null;
 	                file.lock = false;
+	                file.processer = null;
+	                scheduler.statusUpdateHandle(file.id, 'complete', false, false);
 	                scheduler.distributeToProcessers();
 	                return _context4.abrupt("return");
 
-	              case 19:
-	                if (!(file.getStatus() === 'initializing')) {
-	                  _context4.next = 25;
+	              case 23:
+	                if (!(file.getStatus() === 'queue')) {
+	                  _context4.next = 28;
 	                  break;
 	                }
 
-	                console.log('need init');
-	                _context4.next = 23;
+	                _context4.next = 26;
 	                return file.init();
 
-	              case 23:
-	                _this3.run(file, scheduler);
+	              case 26:
+	                _this5.run(file, scheduler);
 
 	                return _context4.abrupt("return");
 
-	              case 25:
+	              case 28:
 	                // file.status should be inited
 	                nextChunk = file.nextChunk();
-	                _context4.next = 28;
+	                _context4.next = 31;
 	                return fetch(nextChunk.filePath, {
 	                  method: 'GET',
 	                  headers: {
@@ -3407,60 +3479,63 @@
 	                  }
 	                });
 
-	              case 28:
+	              case 31:
 	                response = _context4.sent;
-	                console.log(file.name + ' get chunk' + (file.nowChunkIndex - 1));
 
-	                if (!scheduler.freeze) {
-	                  _context4.next = 35;
+	                if (!_this5.freeze) {
+	                  _context4.next = 37;
 	                  break;
 	                }
 
 	                // throw this chunk
 	                file.resumePreChunk();
-	                _this3.idle = true;
-	                file.lock = false;
+	                file.paused = true;
+	                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
 	                return _context4.abrupt("return");
-
-	              case 35:
-	                _context4.next = 37;
-	                return response.arrayBuffer();
 
 	              case 37:
+	                _context4.next = 39;
+	                return response.arrayBuffer();
+
+	              case 39:
 	                buffer = _context4.sent;
 
-	                if (!scheduler.freeze) {
-	                  _context4.next = 43;
+	                if (!_this5.freeze) {
+	                  _context4.next = 45;
 	                  break;
 	                }
 
 	                // throw this chunk
 	                file.resumePreChunk();
-	                _this3.idle = true;
-	                file.lock = false;
+	                file.paused = true;
+	                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
 	                return _context4.abrupt("return");
 
-	              case 43:
+	              case 45:
 	                if (!(file.getStatus() !== 'abort')) {
-	                  _context4.next = 50;
+	                  _context4.next = 51;
 	                  break;
 	                }
 
-	                _context4.next = 46;
+	                _context4.next = 48;
 	                return scheduler.IO.write(file, buffer);
 
-	              case 46:
-	                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
-	                console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+	              case 48:
+	                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+
 	                scheduler.storeFileForResume(file);
 
-	                _this3.run(file, scheduler); // this.run(file, scheduler);
-
-
-	              case 50:
-	                return _context4.abrupt("return");
+	                _this5.run(file, scheduler);
 
 	              case 51:
+	                return _context4.abrupt("return");
+
+	              case 54:
+	                file.paused = true;
+	                console.log(file.id + '- pause');
+	                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+
+	              case 57:
 	              case "end":
 	                return _context4.stop();
 	            }
@@ -3483,11 +3558,28 @@
 	     * @ref https://github.com/Microsoft/TypeScript/issues/29155
 	     */
 	    value: function run(file, scheduler) {
-	      if (!scheduler.freeze) {
+	      file.processer = this;
+	      this.file = file;
+	      this.idle = false;
+
+	      if (!file.lock) {
+	        file.lock = true;
+	        scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
+	      }
+
+	      if (!this.freeze) {
+	        // file.paused = false;
+	        if (file.paused) {
+	          file.paused = false;
+	          console.log(file.id + '- restart');
+	          scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
+	        }
+
 	        this.process(file, scheduler);
 	      } else {
-	        this.idle = true;
-	        file.lock = false;
+	        file.paused = true;
+	        console.log(file.id + '- pause');
+	        scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
 	      }
 	    }
 	  }]);
