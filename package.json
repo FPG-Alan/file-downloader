@@ -2,7 +2,8 @@
   "name": "savvy-transfer",
   "version": "1.0.0",
   "description": "browsers-compatible file system",
-  "main": "index.js",
+  "main": "dist/savvy-transfer.js",
+  "module": "dist/savvy-transfe.esm.js",
   "scripts": {
     "cz": "git-cz",
     "clean": "rimraf dist",
