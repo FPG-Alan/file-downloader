@@ -9,7 +9,7 @@ import SavvyTransfer from '.';
 export default class SavvyZipFile {
   public id: number;
   public chunklist: TChunk[] = [];
-  public status: TStatus;
+  public _status: TStatus = 'initializing';
 
   public isZip: boolean = true;
 
@@ -33,6 +33,7 @@ export default class SavvyZipFile {
 
   private startTime: number = 0;
   private progressHandle: Function;
+  private statusHandle: Function;
 
   public fileType: string = 'File';
 
@@ -42,8 +43,17 @@ export default class SavvyZipFile {
   public processer: any = null;
   public paused: boolean = false;
 
-  constructor(files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number, resumed?: boolean) {
-    this.status = 'initializing';
+  constructor(
+    files: SavvyFile[],
+    name: string,
+    IO_instance: FilesystemIO | MemoryIO,
+    progressHandle: Function,
+    statusHandle: Function,
+    chunkIndex: number = 0,
+    id?: number,
+    offset?: number,
+    resumed?: boolean
+  ) {
     this.IO = IO_instance;
     this.name = name;
     this.files = files;
@@ -55,6 +65,7 @@ export default class SavvyZipFile {
 
     this.totalSize = files.reduce((prev: number, cur: SavvyFile) => prev + cur.fileSize, 0);
     this.progressHandle = progressHandle;
+    this.statusHandle = statusHandle;
 
     this.nowChunkIndex = chunkIndex;
 
@@ -132,8 +143,20 @@ export default class SavvyZipFile {
     }
     return tmpNowFile;
   }
+  public get status(): TStatus {
+    return this._status;
+  }
+  public set status(new_status: TStatus) {
+    this._status = new_status;
+    this.statusHandle && this.statusHandle(this.id, new_status);
+  }
+  /**
+   * use @function getStatus() to get file's current status instead of accessing it directly
+   * so this is done to avoid errors during ts static checking
+   * @ref https://github.com/Microsoft/TypeScript/issues/29155
+   */
   public getStatus = (): TStatus => {
-    return this.status;
+    return this._status;
   };
   public update = (length: number) => {
     if (this.status === 'inited') {

@@ -67,7 +67,7 @@ class SavvyTransfer {
                 data.name,
                 this.IO,
                 this.progressHandle,
-
+                this.statusUpdateHandle,
                 (this.IO_IS_FS && data.chunkIndex) || 0,
                 data.id,
                 (this.IO_IS_FS && data.offset) || 0,
@@ -176,7 +176,7 @@ class SavvyTransfer {
     let tmpZipFile: SavvyZipFile;
     if (asZip) {
       // create a zip file
-      tmpZipFile = new SavvyZipFile(tmpFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle);
+      tmpZipFile = new SavvyZipFile(tmpFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle, this.statusUpdateHandle);
       this.files.push(tmpZipFile);
 
       // store in locastorage for resume
@@ -232,16 +232,18 @@ class SavvyTransfer {
   public pause(ids: number[]): boolean {
     if (this.running) {
       ids.map((id: number) => {
-        let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id);
-
+        let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id && file.status !== 'abort' && file.status !== 'complete');
         // some file in ids may had being resumed.
         // we just need care about those files which have freezed processors.
         if (tmpFile && tmpFile.processer && !tmpFile.processer.freeze) {
-          tmpFile.processer.freeze = true;
+          // tmpFile.processer.freeze = true;
+          tmpFile.paused = true;
         } else if (tmpFile && !tmpFile.processer) {
           tmpFile.paused = true;
 
-          this.statusUpdateHandle(tmpFile.id, tmpFile.status, true, false);
+          // 有两种情况: 1. 当前file在待处理队列中, 但还没有分配处理单元  2. 不在队列中
+
+          tmpFile.status = 'paused';
         }
       });
       return true;
@@ -253,18 +255,11 @@ class SavvyTransfer {
    * resume files' processers which id within ids.
    */
   public resume(ids: number[]) {
-    console.log(ids);
     ids.map((id: number) => {
-      let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id);
-
-      // some file in ids may had being resumed.
-      // we just need care about those files which have freezed processors.
-      if (tmpFile && tmpFile.processer && tmpFile.processer.freeze) {
-        tmpFile.processer.freeze = false;
-        tmpFile.processer.run(tmpFile, this);
-      } else if (tmpFile && !tmpFile.processer && tmpFile.status !== 'abort' && tmpFile.status !== 'complete') {
-        // 安排!
-        console.log('schedule ' + tmpFile.id);
+      let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id && file.status !== 'abort' && file.status !== 'complete');
+      // this.schedule([tmpFile.id]);
+      if (tmpFile) {
+        tmpFile.paused = false;
         this.schedule([tmpFile.id]);
       }
     });
@@ -282,13 +277,7 @@ class SavvyTransfer {
     let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id);
 
     if (tmpFile) {
-      if (tmpFile.processer) {
-        tmpFile.processer.freeze = true;
-        tmpFile.processer.file = null;
-        tmpFile.processer.idle = true;
-        tmpFile.processer = null;
-        tmpFile.lock = false;
-      }
+      tmpFile.paused = true;
       tmpFile.status = 'abort';
       this.deleteFileFromStore(tmpFile);
     }
@@ -308,9 +297,6 @@ class SavvyTransfer {
 
       if (tmpSavvyFile && this.schedulingFiles.filter((file: SavvyFile | SavvyZipFile) => file.id === nonRepeatIds[i]).length <= 0) {
         tmpSavvyFile.status = 'queue';
-
-        this.statusUpdateHandle(tmpSavvyFile.id, 'queue', false, false);
-
         this.schedulingFiles.push(tmpSavvyFile);
       }
     }
@@ -329,8 +315,9 @@ class SavvyTransfer {
       for (let i: number = 0, l = this.processers.length; i < l; i++) {
         if (this.processers[i].idle) {
           let currentFile: SavvyFile | SavvyZipFile | undefined = this.schedulingFiles.find(
-            (file: SavvyFile | SavvyZipFile) => (file && file!.status !== 'abort' && file!.status !== 'complete' && !file.lock) || false
+            (file: SavvyFile | SavvyZipFile) => (file && file!.status !== 'abort' && file!.status !== 'complete' && !file.lock && !file.paused) || false
           );
+
           if (currentFile) {
             this.processers[i].run(currentFile, this);
           }
@@ -345,7 +332,6 @@ class SavvyTransfer {
 
 class Processer {
   public idle: boolean = true;
-  public freeze: boolean = false;
   public file: SavvyFile | SavvyZipFile | null = null;
   /**
    * use @function getStatus() to get file's current status instead of accessing it directly
@@ -355,31 +341,26 @@ class Processer {
   public run(file: SavvyFile | SavvyZipFile, scheduler: SavvyTransfer) {
     file.processer = this;
     this.file = file;
-
     this.idle = false;
 
     if (!file.lock) {
       file.lock = true;
-      scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
     }
 
-    if (!this.freeze) {
-      // file.paused = false;
-      if (file.paused) {
-        file.paused = false;
-        console.log(file.id + '- restart');
-        scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
-      }
+    if (!file.paused) {
+      file.status = 'downloading';
       this.process(file, scheduler);
     } else {
-      file.paused = true;
-
-      console.log(file.id + '- pause');
-      scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+      file.lock = false;
+      file.processer = null;
+      this.idle = true;
+      if (file.status !== 'abort') {
+        file.status = 'paused';
+      }
     }
   }
   public process = async (file: SavvyFile | SavvyZipFile, scheduler: SavvyTransfer): Promise<undefined> => {
-    if (!this.freeze) {
+    if (!file.paused) {
       if (file.getStatus() === 'abort') {
         // delete this file.
         scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex((_file: SavvyFile | SavvyZipFile) => _file.id === file.id), 1);
@@ -389,12 +370,11 @@ class Processer {
         file.lock = false;
         file.processer = null;
 
-        scheduler.statusUpdateHandle(file.id, 'abort', false, false);
         scheduler.distributeToProcessers();
         return;
       }
       // no more chunk need be download, should
-      if (file.getStatus() === 'chunk_empty') {
+      if (file.nowChunkIndex >= file.chunklist.length) {
         scheduler.IO.download([file]);
 
         file.status = 'complete';
@@ -410,13 +390,12 @@ class Processer {
         file.lock = false;
         file.processer = null;
 
-        scheduler.statusUpdateHandle(file.id, 'complete', false, false);
         scheduler.distributeToProcessers();
         return;
       }
 
       // need init to get a filewriter
-      if (file.getStatus() === 'queue') {
+      if (!file.fileWriter) {
         await file.init();
         this.run(file, scheduler);
         return;
@@ -426,38 +405,60 @@ class Processer {
       let nextChunk: TChunk = file.nextChunk();
       let response: Response = await fetch(nextChunk.filePath, { method: 'GET', headers: { Range: `bytes=${nextChunk.start}-${nextChunk.end}` } });
 
-      // console.log(file.name + ' get chunk' + (file.nowChunkIndex - 1));
-      if (this.freeze) {
+      if (file.paused) {
         // throw this chunk
         file.resumePreChunk();
-        file.paused = true;
-        scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+
+        file.lock = false;
+        file.processer = null;
+        this.idle = true;
+        if (file.status !== 'abort') {
+          file.status = 'paused';
+        }
         return;
       }
       let buffer: ArrayBuffer = await response.arrayBuffer();
 
-      if (this.freeze) {
+      if (file.paused) {
         // throw this chunk
         file.resumePreChunk();
         file.paused = true;
-        scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+        file.lock = false;
+        file.processer = null;
+        this.idle = true;
+        if (file.status !== 'abort') {
+          file.status = 'paused';
+        }
         return;
       }
-      if (file.getStatus() !== 'abort') {
-        await scheduler.IO.write(file, buffer);
-        file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
 
-        // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
-        scheduler.storeFileForResume(file);
+      await scheduler.IO.write(file, buffer);
+      if (file.getStatus() === 'abort') {
+        // delete this file.
+        scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex((_file: SavvyFile | SavvyZipFile) => _file.id === file.id), 1);
 
-        this.run(file, scheduler);
+        this.idle = true;
+        this.file = null;
+        file.lock = false;
+        file.processer = null;
+
+        scheduler.distributeToProcessers();
+        return;
       }
+      file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1));
+
+      // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+      scheduler.storeFileForResume(file);
+
+      this.run(file, scheduler);
       return;
     } else {
-      file.paused = true;
-
-      console.log(file.id + '- pause');
-      scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+      if (file.status !== 'abort') {
+        file.status = 'paused';
+      }
+      file.processer = null;
+      file.lock = false;
+      this.idle = true;
     }
   };
 }

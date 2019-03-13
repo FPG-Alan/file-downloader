@@ -2696,19 +2696,19 @@ var SavvyZipFile =
 /*#__PURE__*/
 function () {
   // measure unit is byte per second
-  function SavvyZipFile(files, name, IO_instance, progressHandle) {
+  function SavvyZipFile(files, name, IO_instance, progressHandle, statusHandle) {
     var _this = this;
 
-    var chunkIndex = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : 0;
-    var id = arguments.length > 5 ? arguments[5] : undefined;
-    var offset = arguments.length > 6 ? arguments[6] : undefined;
-    var resumed = arguments.length > 7 ? arguments[7] : undefined;
+    var chunkIndex = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : 0;
+    var id = arguments.length > 6 ? arguments[6] : undefined;
+    var offset = arguments.length > 7 ? arguments[7] : undefined;
+    var resumed = arguments.length > 8 ? arguments[8] : undefined;
 
     classCallCheck(this, SavvyZipFile);
 
     this.id = void 0;
     this.chunklist = [];
-    this.status = void 0;
+    this._status = 'initializing';
     this.isZip = true;
     this.fileWriter = void 0;
     this.fileEntry = void 0;
@@ -2724,6 +2724,7 @@ function () {
     this.speed = 0;
     this.startTime = 0;
     this.progressHandle = void 0;
+    this.statusHandle = void 0;
     this.fileType = 'File';
     this.resumed = false;
     this.lock = false;
@@ -2747,7 +2748,7 @@ function () {
     };
 
     this.getStatus = function () {
-      return _this.status;
+      return _this._status;
     };
 
     this.update = function (length) {
@@ -2763,7 +2764,6 @@ function () {
       _this.progressHandle && _this.progressHandle(_this.id, _this.speed, _this.remainSize, _this.status);
     };
 
-    this.status = 'initializing';
     this.IO = IO_instance;
     this.name = name;
     this.files = files;
@@ -2774,6 +2774,7 @@ function () {
       return prev + cur.fileSize;
     }, 0);
     this.progressHandle = progressHandle;
+    this.statusHandle = statusHandle;
     this.nowChunkIndex = chunkIndex;
 
     for (var i = 0, l = files.length; i < l; i++) {
@@ -2861,6 +2862,21 @@ function () {
 
       return tmpNowFile;
     }
+  }, {
+    key: "status",
+    get: function get() {
+      return this._status;
+    },
+    set: function set(new_status) {
+      this._status = new_status;
+      this.statusHandle && this.statusHandle(this.id, new_status);
+    }
+    /**
+     * use @function getStatus() to get file's current status instead of accessing it directly
+     * so this is done to avoid errors during ts static checking
+     * @ref https://github.com/Microsoft/TypeScript/issues/29155
+     */
+
   }]);
 
   return SavvyZipFile;
@@ -2902,8 +2918,6 @@ function () {
           return file.id === nonRepeatIds[i];
         }).length <= 0) {
           tmpSavvyFile.status = 'queue';
-
-          _this.statusUpdateHandle(tmpSavvyFile.id, 'queue', false, false);
 
           _this.schedulingFiles.push(tmpSavvyFile);
         }
@@ -2955,7 +2969,7 @@ function () {
               // files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number, resumed?: boolean
               return new SavvyZipFile(data.files.map(function (_file) {
                 return new SavvyFile(_file.path, _file.name, _file.size, SavvyTransfer.CHUNK_SIZE, _this2.IO, _this2.progressHandle, _this2.IO_IS_FS && _file.bufferAcc || 0, _this2.IO_IS_FS && _file.offset || 0);
-              }), data.name, _this2.IO, _this2.progressHandle, _this2.IO_IS_FS && data.chunkIndex || 0, data.id, _this2.IO_IS_FS && data.offset || 0, true);
+              }), data.name, _this2.IO, _this2.progressHandle, _this2.statusUpdateHandle, _this2.IO_IS_FS && data.chunkIndex || 0, data.id, _this2.IO_IS_FS && data.offset || 0, true);
             } else {
               return new SavvyFile(data.path, data.name, data.size, SavvyTransfer.CHUNK_SIZE, _this2.IO, _this2.progressHandle);
             }
@@ -3111,7 +3125,7 @@ function () {
                 }
 
                 // create a zip file
-                tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle);
+                tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle, this.statusUpdateHandle);
                 this.files.push(tmpZipFile); // store in locastorage for resume
 
                 this.storeFileForResume(tmpZipFile);
@@ -3261,17 +3275,18 @@ function () {
       if (this.running) {
         ids.map(function (id) {
           var tmpFile = _this3.files.find(function (file) {
-            return file.id === id;
+            return file.id === id && file.status !== 'abort' && file.status !== 'complete';
           }); // some file in ids may had being resumed.
           // we just need care about those files which have freezed processors.
 
 
           if (tmpFile && tmpFile.processer && !tmpFile.processer.freeze) {
-            tmpFile.processer.freeze = true;
-          } else if (tmpFile && !tmpFile.processer) {
+            // tmpFile.processer.freeze = true;
             tmpFile.paused = true;
+          } else if (tmpFile && !tmpFile.processer) {
+            tmpFile.paused = true; // 有两种情况: 1. 当前file在待处理队列中, 但还没有分配处理单元  2. 不在队列中
 
-            _this3.statusUpdateHandle(tmpFile.id, tmpFile.status, true, false);
+            tmpFile.status = 'paused';
           }
         });
         return true;
@@ -3289,20 +3304,14 @@ function () {
     value: function resume(ids) {
       var _this4 = this;
 
-      console.log(ids);
       ids.map(function (id) {
         var tmpFile = _this4.files.find(function (file) {
-          return file.id === id;
-        }); // some file in ids may had being resumed.
-        // we just need care about those files which have freezed processors.
+          return file.id === id && file.status !== 'abort' && file.status !== 'complete';
+        }); // this.schedule([tmpFile.id]);
 
 
-        if (tmpFile && tmpFile.processer && tmpFile.processer.freeze) {
-          tmpFile.processer.freeze = false;
-          tmpFile.processer.run(tmpFile, _this4);
-        } else if (tmpFile && !tmpFile.processer && tmpFile.status !== 'abort' && tmpFile.status !== 'complete') {
-          // 安排!
-          console.log('schedule ' + tmpFile.id);
+        if (tmpFile) {
+          tmpFile.paused = false;
 
           _this4.schedule([tmpFile.id]);
         }
@@ -3325,14 +3334,7 @@ function () {
       });
 
       if (tmpFile) {
-        if (tmpFile.processer) {
-          tmpFile.processer.freeze = true;
-          tmpFile.processer.file = null;
-          tmpFile.processer.idle = true;
-          tmpFile.processer = null;
-          tmpFile.lock = false;
-        }
-
+        tmpFile.paused = true;
         tmpFile.status = 'abort';
         this.deleteFileFromStore(tmpFile);
       }
@@ -3359,7 +3361,7 @@ function () {
         for (var i = 0, l = this.processers.length; i < l; i++) {
           if (this.processers[i].idle) {
             var currentFile = this.schedulingFiles.find(function (file) {
-              return file && file.status !== 'abort' && file.status !== 'complete' && !file.lock || false;
+              return file && file.status !== 'abort' && file.status !== 'complete' && !file.lock && !file.paused || false;
             });
 
             if (currentFile) {
@@ -3390,7 +3392,6 @@ function () {
     classCallCheck(this, Processer);
 
     this.idle = true;
-    this.freeze = false;
     this.file = null;
 
     this.process =
@@ -3404,13 +3405,13 @@ function () {
           while (1) {
             switch (_context4.prev = _context4.next) {
               case 0:
-                if (_this5.freeze) {
-                  _context4.next = 54;
+                if (file.paused) {
+                  _context4.next = 64;
                   break;
                 }
 
                 if (!(file.getStatus() === 'abort')) {
-                  _context4.next = 10;
+                  _context4.next = 9;
                   break;
                 }
 
@@ -3422,13 +3423,12 @@ function () {
                 _this5.file = null;
                 file.lock = false;
                 file.processer = null;
-                scheduler.statusUpdateHandle(file.id, 'abort', false, false);
                 scheduler.distributeToProcessers();
                 return _context4.abrupt("return");
 
-              case 10:
-                if (!(file.getStatus() === 'chunk_empty')) {
-                  _context4.next = 23;
+              case 9:
+                if (!(file.nowChunkIndex >= file.chunklist.length)) {
+                  _context4.next = 21;
                   break;
                 }
 
@@ -3444,28 +3444,27 @@ function () {
                 _this5.file = null;
                 file.lock = false;
                 file.processer = null;
-                scheduler.statusUpdateHandle(file.id, 'complete', false, false);
                 scheduler.distributeToProcessers();
                 return _context4.abrupt("return");
 
-              case 23:
-                if (!(file.getStatus() === 'queue')) {
-                  _context4.next = 28;
+              case 21:
+                if (file.fileWriter) {
+                  _context4.next = 26;
                   break;
                 }
 
-                _context4.next = 26;
+                _context4.next = 24;
                 return file.init();
 
-              case 26:
+              case 24:
                 _this5.run(file, scheduler);
 
                 return _context4.abrupt("return");
 
-              case 28:
+              case 26:
                 // file.status should be inited
                 nextChunk = file.nextChunk();
-                _context4.next = 31;
+                _context4.next = 29;
                 return fetch(nextChunk.filePath, {
                   method: 'GET',
                   headers: {
@@ -3473,18 +3472,24 @@ function () {
                   }
                 });
 
-              case 31:
+              case 29:
                 response = _context4.sent;
 
-                if (!_this5.freeze) {
+                if (!file.paused) {
                   _context4.next = 37;
                   break;
                 }
 
                 // throw this chunk
                 file.resumePreChunk();
-                file.paused = true;
-                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+                file.lock = false;
+                file.processer = null;
+                _this5.idle = true;
+
+                if (file.status !== 'abort') {
+                  file.status = 'paused';
+                }
+
                 return _context4.abrupt("return");
 
               case 37:
@@ -3494,42 +3499,64 @@ function () {
               case 39:
                 buffer = _context4.sent;
 
-                if (!_this5.freeze) {
-                  _context4.next = 45;
+                if (!file.paused) {
+                  _context4.next = 48;
                   break;
                 }
 
                 // throw this chunk
                 file.resumePreChunk();
                 file.paused = true;
-                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+                file.lock = false;
+                file.processer = null;
+                _this5.idle = true;
+
+                if (file.status !== 'abort') {
+                  file.status = 'paused';
+                }
+
                 return _context4.abrupt("return");
 
-              case 45:
-                if (!(file.getStatus() !== 'abort')) {
-                  _context4.next = 51;
+              case 48:
+                _context4.next = 50;
+                return scheduler.IO.write(file, buffer);
+
+              case 50:
+                if (!(file.getStatus() === 'abort')) {
+                  _context4.next = 58;
                   break;
                 }
 
-                _context4.next = 48;
-                return scheduler.IO.write(file, buffer);
+                // delete this file.
+                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
+                  return _file.id === file.id;
+                }), 1);
+                _this5.idle = true;
+                _this5.file = null;
+                file.lock = false;
+                file.processer = null;
+                scheduler.distributeToProcessers();
+                return _context4.abrupt("return");
 
-              case 48:
+              case 58:
                 file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
 
                 scheduler.storeFileForResume(file);
 
                 _this5.run(file, scheduler);
 
-              case 51:
                 return _context4.abrupt("return");
 
-              case 54:
-                file.paused = true;
-                console.log(file.id + '- pause');
-                scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+              case 64:
+                if (file.status !== 'abort') {
+                  file.status = 'paused';
+                }
 
-              case 57:
+                file.processer = null;
+                file.lock = false;
+                _this5.idle = true;
+
+              case 68:
               case "end":
                 return _context4.stop();
             }
@@ -3558,22 +3585,19 @@ function () {
 
       if (!file.lock) {
         file.lock = true;
-        scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
       }
 
-      if (!this.freeze) {
-        // file.paused = false;
-        if (file.paused) {
-          file.paused = false;
-          console.log(file.id + '- restart');
-          scheduler.statusUpdateHandle(file.id, 'downloading', false, true);
-        }
-
+      if (!file.paused) {
+        file.status = 'downloading';
         this.process(file, scheduler);
       } else {
-        file.paused = true;
-        console.log(file.id + '- pause');
-        scheduler.statusUpdateHandle(file.id, 'downloading', true, true);
+        file.lock = false;
+        file.processer = null;
+        this.idle = true;
+
+        if (file.status !== 'abort') {
+          file.status = 'paused';
+        }
       }
     }
   }]);
