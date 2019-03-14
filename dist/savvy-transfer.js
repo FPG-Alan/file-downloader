@@ -3191,10 +3191,14 @@
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee3(path, name) {
 	        var asZip,
+	            message,
 	            response,
+	            _message,
 	            fileSize,
+	            _message2,
 	            tmpFile,
 	            _args3 = arguments;
+
 	        return regenerator.wrap(function _callee3$(_context3) {
 	          while (1) {
 	            switch (_context3.prev = _context3.next) {
@@ -3202,15 +3206,16 @@
 	                asZip = _args3.length > 2 && _args3[2] !== undefined ? _args3[2] : false;
 
 	                if (path) {
-	                  _context3.next = 4;
+	                  _context3.next = 5;
 	                  break;
 	                }
 
 	                console.log('file path invalid.');
-	                return _context3.abrupt("return");
+	                message = 'file path invalid.';
+	                return _context3.abrupt("return", message);
 
-	              case 4:
-	                _context3.next = 6;
+	              case 5:
+	                _context3.next = 7;
 	                return fetch(path, {
 	                  method: 'GET',
 	                  headers: {
@@ -3218,26 +3223,33 @@
 	                  }
 	                });
 
-	              case 6:
+	              case 7:
 	                response = _context3.sent;
 
 	                if (response.headers.get('content-range')) {
-	                  _context3.next = 10;
+	                  _context3.next = 12;
 	                  break;
 	                }
 
 	                console.log('can not get file size, check file path or contact service provider.');
-	                return _context3.abrupt("return");
+	                _message = 'can not get file size, check file path or contact service provider.';
+	                return _context3.abrupt("return", _message);
 
-	              case 10:
+	              case 12:
 	                // calculate whether the size limit is exceeded
 	                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
-	                /*if (fileSize > SavvyTransfer.SIZE_LIMIT || fileSize + this.size > SavvyTransfer.SIZE_LIMIT) {
-	                  console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
-	                   return;
-	                } */
-	                // create new file
 
+	                if (!(fileSize > SavvyTransfer.SIZE_LIMIT)) {
+	                  _context3.next = 17;
+	                  break;
+	                }
+
+	                console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
+	                _message2 = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
+	                return _context3.abrupt("return", _message2);
+
+	              case 17:
+	                // create new file
 	                tmpFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle); // ensure each file get it's writer from IO
 	                // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
 	                //  in other word, this savvyfile does not need a writer(init);
@@ -3246,15 +3258,15 @@
 	                  this.files.push(tmpFile);
 	                }
 
-	                _context3.next = 15;
+	                _context3.next = 21;
 	                return new Promise(function (resolve, reject) {
 	                  setTimeout(resolve, 1);
 	                });
 
-	              case 15:
+	              case 21:
 	                return _context3.abrupt("return", tmpFile);
 
-	              case 16:
+	              case 22:
 	              case "end":
 	                return _context3.stop();
 	            }

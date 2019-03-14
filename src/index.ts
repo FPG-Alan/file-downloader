@@ -191,26 +191,27 @@ class SavvyTransfer {
     await this._addFile(path, name);
     return this.files;
   }
-  private async _addFile(path: string, name: string, asZip: boolean = false): Promise<SavvyFile | undefined> {
+  private async _addFile(path: string, name: string, asZip: boolean = false): Promise<SavvyFile | string> {
     if (!path) {
       console.log('file path invalid.');
-      return;
+      let message = 'file path invalid.';
+      return message;
     }
 
     // get file size
     let response: Response = await fetch(path, { method: 'GET', headers: { Range: 'bytes=0-1' } });
     if (!response.headers.get('content-range')) {
       console.log('can not get file size, check file path or contact service provider.');
-
-      return;
+      let message = 'can not get file size, check file path or contact service provider.';
+      return message;
     }
     // calculate whether the size limit is exceeded
     let fileSize: number = parseInt(response.headers.get('content-range')!.split('/')[1]);
-    /*if (fileSize > SavvyTransfer.SIZE_LIMIT || fileSize + this.size > SavvyTransfer.SIZE_LIMIT) {
+    if (fileSize > SavvyTransfer.SIZE_LIMIT) {
       console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
-
-      return;
-    } */
+      let message = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
+      return message;
+    }
     // create new file
     let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle);
     // ensure each file get it's writer from IO
