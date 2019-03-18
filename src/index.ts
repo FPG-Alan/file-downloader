@@ -7,9 +7,11 @@ import SavvyZipFile from './zip_file';
 const IS64BIT: boolean = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(navigator.userAgent);
 const DEV: boolean = false;
 class SavvyTransfer {
-  static SIZE_LIMIT: number = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
-  static CHUNK_SIZE: number = 1024 * 1024 * 10;
-  static HTTP_NUM: number = 5;
+  private SIZE_LIMIT: number = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
+  private CHUNK_SIZE: number = 1024 * 1024 * 10;
+  private HTTP_NUM: number = 5;
+
+  public totalSize: number = 0;
   public IO: FilesystemIO | MemoryIO;
   public IO_IS_FS: boolean = false;
   public progressHandle: Function;
@@ -24,6 +26,9 @@ class SavvyTransfer {
     if ((window as any).requestFileSystem || (window as any).webkitRequestFileSystem) {
       this.IO = new FilesystemIO();
       this.IO_IS_FS = true;
+      // fs has a largeeeee size limit, up to 200GB
+      this.SIZE_LIMIT = 1024 * 1024 * 1024 * 200;
+      // this.SIZE_LIMIT = 1024 * 1024 * 250;
     } else {
       this.IO = new MemoryIO();
     }
@@ -33,7 +38,7 @@ class SavvyTransfer {
       (this.IO as FilesystemIO).removeAll();
     }
 
-    this.processers = new Array(SavvyTransfer.HTTP_NUM).fill('').map((_: number) => new Processer());
+    this.processers = new Array(this.HTTP_NUM).fill('').map((_: number) => new Processer());
   }
 
   /**
@@ -53,16 +58,7 @@ class SavvyTransfer {
               return new SavvyZipFile(
                 data.files.map(
                   (_file: TResumeFile) =>
-                    new SavvyFile(
-                      _file.path,
-                      _file.name,
-                      _file.size,
-                      SavvyTransfer.CHUNK_SIZE,
-                      this.IO,
-                      this.progressHandle,
-                      (this.IO_IS_FS && _file.bufferAcc) || 0,
-                      (this.IO_IS_FS && _file.offset) || 0
-                    )
+                    new SavvyFile(_file.path, _file.name, _file.size, this.CHUNK_SIZE, this.IO, this.progressHandle, (this.IO_IS_FS && _file.bufferAcc) || 0, (this.IO_IS_FS && _file.offset) || 0)
                 ),
                 data.name,
                 this.IO,
@@ -74,7 +70,7 @@ class SavvyTransfer {
                 true
               );
             } else {
-              return new SavvyFile(data.path!, data.name, data.size!, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle);
+              return new SavvyFile(data.path!, data.name, data.size!, this.CHUNK_SIZE, this.IO, this.progressHandle);
             }
           })
         );
@@ -166,10 +162,13 @@ class SavvyTransfer {
   public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<SavvyZipFile | Array<SavvyFile>> {
     let tmpFiles: SavvyFile[] = [];
     for (let i: number = 0, l: number = files.length; i < l; i++) {
-      let tmpFile: SavvyFile | undefined = await this._addFile(files[i].path, files[i].name, asZip);
-
-      if (tmpFile) {
-        tmpFiles.push(tmpFile);
+      try {
+        let tmpFile: SavvyFile | undefined | string = await this._addFile(files[i].path, files[i].name, asZip);
+        if (tmpFile && typeof tmpFile !== 'string') {
+          tmpFiles.push(tmpFile);
+        }
+      } catch (e) {
+        throw e;
       }
     }
 
@@ -191,29 +190,31 @@ class SavvyTransfer {
     await this._addFile(path, name);
     return this.files;
   }
-  private async _addFile(path: string, name: string, asZip: boolean = false): Promise<SavvyFile | string> {
+  private async _addFile(path: string, name: string, asZip: boolean = false): Promise<SavvyFile | undefined> {
     if (!path) {
       console.log('file path invalid.');
-      let message = 'file path invalid.';
-      return message;
+      throw new Error('Invalid file path');
+      // return;
     }
 
     // get file size
     let response: Response = await fetch(path, { method: 'GET', headers: { Range: 'bytes=0-1' } });
     if (!response.headers.get('content-range')) {
       console.log('can not get file size, check file path or contact service provider.');
-      let message = 'can not get file size, check file path or contact service provider.';
-      return message;
+      // let message = 'can not get file size, check file path or contact service provider.';
+      throw new Error('Can not get file size, check file path or contact service provider.');
+      // return;
     }
     // calculate whether the size limit is exceeded
     let fileSize: number = parseInt(response.headers.get('content-range')!.split('/')[1]);
-    if (fileSize > SavvyTransfer.SIZE_LIMIT) {
+    if (fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT) {
       console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');
-      let message = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
-      return message;
+      // let message = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
+      throw new Error('exceed');
+      // return;
     }
     // create new file
-    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, SavvyTransfer.CHUNK_SIZE, this.IO, this.progressHandle);
+    let tmpFile: SavvyFile = new SavvyFile(path, name, fileSize, this.CHUNK_SIZE, this.IO, this.progressHandle);
     // ensure each file get it's writer from IO
     // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
     //  in other word, this savvyfile does not need a writer(init);
@@ -221,30 +222,30 @@ class SavvyTransfer {
       this.files.push(tmpFile);
     }
 
+    this.totalSize += tmpFile.fileSize;
     await new Promise((resolve, reject) => {
       setTimeout(resolve, 1);
     });
     return tmpFile;
   }
   /**
-   * @param {number[]} ids
+   * @param {Array<SavvyFile | SavvyZipFile>[]} files
    * pause files' processers which id within ids
    */
-  public pause(ids: number[]): boolean {
+  public pause(files: Array<SavvyFile | SavvyZipFile>): boolean {
     if (this.running) {
-      ids.map((id: number) => {
-        let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id && file.status !== 'abort' && file.status !== 'complete');
+      files.map((file: SavvyFile | SavvyZipFile) => {
         // some file in ids may had being resumed.
         // we just need care about those files which have freezed processors.
-        if (tmpFile && tmpFile.processer && !tmpFile.processer.freeze) {
+        if (file.processer && !file.processer.freeze) {
           // tmpFile.processer.freeze = true;
-          tmpFile.paused = true;
-        } else if (tmpFile && !tmpFile.processer) {
-          tmpFile.paused = true;
+          file.paused = true;
+        } else if (!file.processer) {
+          file.paused = true;
 
           // 有两种情况: 1. 当前file在待处理队列中, 但还没有分配处理单元  2. 不在队列中
 
-          tmpFile.status = 'paused';
+          file.status = 'paused';
         }
       });
       return true;
@@ -252,37 +253,34 @@ class SavvyTransfer {
     return false;
   }
   /**
-   * @param {number[]} ids
+   * @param {Array<SavvyFile | SavvyZipFile>[]} files
    * resume files' processers which id within ids.
    */
-  public resume(ids: number[]) {
-    ids.map((id: number) => {
-      let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id && file.status !== 'abort' && file.status !== 'complete');
-      // this.schedule([tmpFile.id]);
-      if (tmpFile) {
-        tmpFile.paused = false;
-        this.schedule([tmpFile.id]);
-      }
+  public resume(files: Array<SavvyFile | SavvyZipFile>) {
+    files.map((file: SavvyFile | SavvyZipFile) => {
+      file.paused = false;
+      this.schedule([file.id]);
     });
   }
 
   /**
-   * @param {number} id
+   * @param {SavvyFile | SavvyZipFile} file
    * @returns SavvyFile | SavvyZipFile | undefined
    * remove file
    * 1. pause its processor if there has one.
    * 2. release the processor resource.
    * 3. delete its record in LocalStorage.
    */
-  public removeFile(id: number): SavvyFile | SavvyZipFile | undefined {
-    let tmpFile: SavvyFile | SavvyZipFile | undefined = this.files.find((file: SavvyFile | SavvyZipFile) => file.id === id);
+  public removeFile(file: SavvyFile | SavvyZipFile): SavvyFile | SavvyZipFile | undefined {
+    if (file && file.status !== 'abort') {
+      file.paused = true;
+      file.status = 'abort';
+      this.totalSize -= file.fileSize;
+      this.IO.deleteFile(file);
 
-    if (tmpFile) {
-      tmpFile.paused = true;
-      tmpFile.status = 'abort';
-      this.deleteFileFromStore(tmpFile);
+      this.deleteFileFromStore(file);
     }
-    return tmpFile;
+    return file;
   }
   /**
    * @param {number[]?} ids
@@ -382,7 +380,7 @@ class Processer {
 
         scheduler.storeFileForResume(file);
         scheduler.IO.deleteFile(file);
-
+        scheduler.totalSize -= file.fileSize;
         // delete this file.
         scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex((_file: SavvyFile | SavvyZipFile) => _file.id === file.id), 1);
 

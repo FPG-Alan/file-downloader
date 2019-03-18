@@ -43,7 +43,10 @@ export default class MemoryIO extends IO {
       }
     });
   }
-  public deleteFile(file: SavvyFile | SavvyZipFile): void {}
+  public deleteFile(file: SavvyFile | SavvyZipFile): void {
+    file.fileWriter.clear();
+    file.fileWriter = null;
+  }
   public download(files: Array<SavvyFile | SavvyZipFile>): void {
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       let blob: Blob = files[i].fileWriter.getBlob(files[i].name);
@@ -108,5 +111,9 @@ class MemoryWrite {
       console.log(e);
       this.onerror && this.onerror(e);
     }
+  }
+
+  public clear() {
+    this.blobList = [];
   }
 }
