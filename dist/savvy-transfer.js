@@ -949,8 +949,8 @@
 
 	var inherits = _inherits;
 
-	var IO = function IO() {
-	  classCallCheck(this, IO);
+	var SavvyIO = function SavvyIO() {
+	  classCallCheck(this, SavvyIO);
 	};
 
 	var extmime = {
@@ -1264,6 +1264,14 @@
 
 	  return uppercase ? ext.toUpperCase() : ext.toLowerCase();
 	}
+	function dec2hex(dec) {
+	  return ('0' + dec.toString(16)).substr(-2);
+	}
+	function generateId(len) {
+	  var arr = new Uint8Array((len || 40) / 2);
+	  window.crypto.getRandomValues(arr);
+	  return Array.from(arr, dec2hex).join('');
+	}
 
 	/* export default class Crc32 {
 	  private crc: number = -1;
@@ -1326,7 +1334,6 @@
 	  return crc ^ -1;
 	}
 
-	//     Int64.js
 	var VAL32 = 0x100000000; // Map for converting hex octets to strings
 
 	var _HEX = [];
@@ -1349,40 +1356,19 @@
 	 * new Int64(hi, lo)             - Raw bits as two 32-bit values
 	 */
 
-	var Int64 = function Int64(a1, a2) {
-	  var asIs = hasBuffer ? a1 instanceof Buffer : a1 instanceof Uint8Array;
+	var Int64 = // Max integer value that JS can accurately represent
+	// Min integer value that JS can accurately represent
+	function Int64(a1, a2) {
+	  var _this = this;
 
-	  if (asIs) {
-	    this.buffer = a1;
-	    this.offset = a2 || 0;
-	  } else if (Object.prototype.toString.call(a1) == '[object Uint8Array]') {
-	    // Under Browserify, Buffers can extend Uint8Arrays rather than an
-	    // instance of Buffer. We could assume the passed in Uint8Array is actually
-	    // a buffer but that won't handle the case where a raw Uint8Array is passed
-	    // in. We construct a new Buffer just in case.
-	    this.buffer = new Buffer(a1);
-	    this.offset = a2 || 0;
-	  } else {
-	    this.buffer = this.buffer || (hasBuffer ? new Buffer(8) : new Uint8Array(8));
-	    this.offset = 0;
-	    this.setValue.apply(this, arguments);
-	  }
-	}; // Max integer value that JS can accurately represent
+	  classCallCheck(this, Int64);
 
+	  this.buffer = void 0;
+	  this.offset = void 0;
 
-	Int64.MAX_INT = Math.pow(2, 53); // Min integer value that JS can accurately represent
-
-	Int64.MIN_INT = -Math.pow(2, 53);
-	Int64.prototype = {
-	  constructor: Int64,
-
-	  /**
-	   * Do in-place 2's compliment.  See
-	   * http://en.wikipedia.org/wiki/Two's_complement
-	   */
-	  _2scomp: function _2scomp() {
-	    var b = this.buffer,
-	        o = this.offset,
+	  this._2scomp = function () {
+	    var b = _this.buffer,
+	        o = _this.offset,
 	        carry = 1;
 
 	    for (var i = o + 7; i >= o; i--) {
@@ -1390,19 +1376,12 @@
 	      b[i] = v & 0xff;
 	      carry = v >> 8;
 	    }
-	  },
+	  };
 
-	  /**
-	   * Set the value. Takes any of the following arguments:
-	   *
-	   * setValue(string) - A hexidecimal string
-	   * setValue(number) - Number (throws if n is outside int64 range)
-	   * setValue(hi, lo) - Raw bits as two 32-bit values
-	   */
-	  setValue: function setValue(hi, lo) {
+	  this.setValue = function (hi, lo) {
 	    var negate = false;
 
-	    if (arguments.length == 1) {
+	    if (!lo) {
 	      if (typeof hi == 'number') {
 	        // Simplify bitfield retrieval by using abs() value.  We restore sign
 	        // later
@@ -1426,8 +1405,8 @@
 	    // Copy bytes to buffer
 
 
-	    var b = this.buffer,
-	        o = this.offset;
+	    var b = _this.buffer,
+	        o = _this.offset;
 
 	    for (var i = 7; i >= 0; i--) {
 	      b[o + i] = lo & 0xff;
@@ -1435,23 +1414,12 @@
 	    } // Restore sign of passed argument
 
 
-	    if (negate) this._2scomp();
-	  },
+	    if (negate) _this._2scomp();
+	  };
 
-	  /**
-	   * Convert to a native JS number.
-	   *
-	   * WARNING: Do not expect this value to be accurate to integer precision for
-	   * large (positive or negative) numbers!
-	   *
-	   * @param allowImprecise If true, no check is performed to verify the
-	   * returned value is accurate to integer precision.  If false, imprecise
-	   * numbers (very large positive or negative numbers) will be forced to +/-
-	   * Infinity.
-	   */
-	  toNumber: function toNumber(allowImprecise) {
-	    var b = this.buffer,
-	        o = this.offset; // Running sum of octets, doing a 2's complement
+	  this.toNumber = function (allowImprecise) {
+	    var b = _this.buffer,
+	        o = _this.offset; // Running sum of octets, doing a 2's complement
 
 	    var negate = b[o] & 0x80,
 	        x = 0,
@@ -1475,122 +1443,97 @@
 	    }
 
 	    return negate ? -x : x;
-	  },
+	  };
 
-	  /**
-	   * Convert to a JS Number. Returns +/-Infinity for values that can't be
-	   * represented to integer precision.
-	   */
-	  valueOf: function valueOf() {
-	    return this.toNumber(false);
-	  },
+	  this.valueOf = function () {
+	    return _this.toNumber(false);
+	  };
 
-	  /**
-	   * Return string value
-	   *
-	   * @param radix Just like Number#toString()'s radix
-	   */
-	  toString: function toString(radix) {
-	    return this.valueOf().toString(radix || 10);
-	  },
+	  this.toString = function (radix) {
+	    return _this.valueOf().toString(radix || 10);
+	  };
 
-	  /**
-	   * Return a string showing the buffer octets, with MSB on the left.
-	   *
-	   * @param sep separator string. default is '' (empty string)
-	   */
-	  toOctetString: function toOctetString(sep) {
+	  this.toOctetString = function (sep) {
 	    var out = new Array(8);
-	    var b = this.buffer,
-	        o = this.offset;
+	    var b = _this.buffer,
+	        o = _this.offset;
 
 	    for (var i = 0; i < 8; i++) {
 	      out[i] = _HEX[b[o + i]];
 	    }
 
 	    return out.join(sep || '');
-	  },
+	  };
 
-	  /**
-	   * Returns the int64's 8 bytes in a buffer.
-	   *
-	   * @param {bool} [rawBuffer=false]  If no offset and this is true, return the internal buffer.  Should only be used if
-	   *                                  you're discarding the Int64 afterwards, as it breaks encapsulation.
-	   */
-	  toBuffer: function toBuffer(rawBuffer) {
-	    if (rawBuffer && this.offset === 0) return this.buffer;
+	  this.toBuffer = function (rawBuffer) {
+	    if (rawBuffer && _this.offset === 0) return _this.buffer;
 	    var out = new Buffer(8);
-	    this.buffer.copy(out, 0, this.offset, this.offset + 8);
+
+	    _this.buffer.copy(out, 0, _this.offset, _this.offset + 8);
+
 	    return out;
-	  },
+	  };
 
-	  /**
-	   * Copy 8 bytes of int64 into target buffer at target offset.
-	   *
-	   * @param {Buffer} targetBuffer       Buffer to copy into.
-	   * @param {number} [targetOffset=0]   Offset into target buffer.
-	   */
-	  copy: function copy(targetBuffer, targetOffset) {
-	    this.buffer.copy(targetBuffer, targetOffset || 0, this.offset, this.offset + 8);
-	  },
+	  this.copy = function (targetBuffer, targetOffset) {
+	    _this.buffer.copy(targetBuffer, targetOffset || 0, _this.offset, _this.offset + 8);
+	  };
 
-	  /**
-	   * Returns a number indicating whether this comes before or after or is the
-	   * same as the other in sort order.
-	   *
-	   * @param {Int64} other  Other Int64 to compare.
-	   */
-	  compare: function compare(other) {
+	  this.compare = function (other) {
 	    // If sign bits differ ...
-	    if ((this.buffer[this.offset] & 0x80) != (other.buffer[other.offset] & 0x80)) {
-	      return other.buffer[other.offset] - this.buffer[this.offset];
+	    if ((_this.buffer[_this.offset] & 0x80) != (other.buffer[other.offset] & 0x80)) {
+	      return other.buffer[other.offset] - _this.buffer[_this.offset];
 	    } // otherwise, compare bytes lexicographically
 
 
 	    for (var i = 0; i < 8; i++) {
-	      if (this.buffer[this.offset + i] !== other.buffer[other.offset + i]) {
-	        return this.buffer[this.offset + i] - other.buffer[other.offset + i];
+	      if (_this.buffer[_this.offset + i] !== other.buffer[other.offset + i]) {
+	        return _this.buffer[_this.offset + i] - other.buffer[other.offset + i];
 	      }
 	    }
 
 	    return 0;
-	  },
+	  };
 
-	  /**
-	   * Returns a boolean indicating if this integer is equal to other.
-	   *
-	   * @param {Int64} other  Other Int64 to compare.
-	   */
-	  equals: function equals(other) {
-	    return this.compare(other) === 0;
-	  },
+	  this.equals = function (other) {
+	    return _this.compare(other) === 0;
+	  };
 
-	  /**
-	   * Pretty output in console.log
-	   */
-	  inspect: function inspect() {
-	    return '[Int64 value:' + this + ' octets:' + this.toOctetString(' ') + ']';
+	  this.inspect = function () {
+	    return '[Int64 value:' + _this + ' octets:' + _this.toOctetString(' ') + ']';
+	  };
+
+	  var asIs = hasBuffer ? a1 instanceof Buffer : a1 instanceof Uint8Array;
+
+	  if (asIs) {
+	    this.buffer = a1;
+	    this.offset = a2 || 0;
+	  } else if (Object.prototype.toString.call(a1) == '[object Uint8Array]') {
+	    // Under Browserify, Buffers can extend Uint8Arrays rather than an
+	    // instance of Buffer. We could assume the passed in Uint8Array is actually
+	    // a buffer but that won't handle the case where a raw Uint8Array is passed
+	    // in. We construct a new Buffer just in case.
+	    this.buffer = new Buffer(a1);
+	    this.offset = a2 || 0;
+	  } else {
+	    this.buffer = this.buffer || (hasBuffer ? new Buffer(8) : new Uint8Array(8));
+	    this.offset = 0;
+	    this.setValue(a1, a2);
 	  }
-	};
-
-	var appendABViewSupported = false;
-
-	try {
-	  appendABViewSupported = new Blob([new DataView(new ArrayBuffer(0))]).size === 0;
-	} catch (e) {
-	  console.log(e);
 	}
+	/**
+	 * Do in-place 2's compliment.  See
+	 * http://en.wikipedia.org/wiki/Two's_complement
+	 */
+	;
+
+	Int64.MAX_INT = Math.pow(2, 53);
+	Int64.MIN_INT = -Math.pow(2, 53);
+
 	var ZipWriter =
 	/*#__PURE__*/
 	function () {
 	  function ZipWriter() {
 	    classCallCheck(this, ZipWriter);
-
-	    this.writer = void 0;
-	    this.fileNames = [];
-	    this.files = {};
-	    this.dataLength = 0;
-	    this.offset = 0;
 	  }
 
 	  createClass(ZipWriter, [{
@@ -1598,7 +1541,7 @@
 	    value: function () {
 	      var _add = asyncToGenerator(
 	      /*#__PURE__*/
-	      regenerator.mark(function _callee(currentFile, zipFile, _buffer, isLast) {
+	      regenerator.mark(function _callee(currentFile, transfer, _buffer, isLast) {
 	        var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, end, dirData, tmpSize, tmpOffset, tmpBuf, i, _i;
 
 	        return regenerator.wrap(function _callee$(_context) {
@@ -1608,14 +1551,14 @@
 	                // part of the current file.
 	                buffer = new Uint8Array(_buffer);
 	                crc = crc32(buffer, currentFile.crc || 0, buffer.byteLength);
-	                ziper = new ZIPClass(zipFile.fileSize);
+	                ziper = new ZIPClass(transfer.fileSize);
 	                fileName = unescape(encodeURIComponent(currentFile.name));
 	                currentFile.bufferAcc += buffer.byteLength;
 	                currentFile.crc = crc;
 
 	                if (currentFile.offset === 0) {
 	                  // begin set header
-	                  currentFile.headerPos = zipFile.offset;
+	                  currentFile.headerPos = transfer.offset;
 	                  ebuf = ezBuffer(1 + 4 + 4 + fileName.length);
 	                  ebuf.i16(zipUtf8ExtraId);
 	                  ebuf.i16(5 + fileName.length); // size
@@ -1650,9 +1593,9 @@
 	                }
 
 	                if (isLast) {
-	                  end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, []); // console.log('this file is the last to be added to this zip, add end.');
+	                  end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []); // console.log('this file is the last to be added to this zip, add end.');
 
-	                  dirData = zipFile.files.map(function (file) {
+	                  dirData = transfer.files.map(function (file) {
 	                    return ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord;
 	                  });
 	                  tmpSize = 0, tmpOffset = buffer.byteLength;
@@ -1674,10 +1617,10 @@
 	                  buffer = tmpBuf;
 	                }
 
-	                zipFile.offset += buffer.byteLength; // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
+	                transfer.offset += buffer.byteLength; // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
 
 	                return _context.abrupt("return", new Promise(function (resolve, reject) {
-	                  var tmpWrite = zipFile.fileWriter;
+	                  var tmpWrite = transfer.fileWriter;
 
 	                  tmpWrite.onwriteend = function (e) {
 	                    resolve();
@@ -1704,95 +1647,6 @@
 
 	      return add;
 	    }()
-	    /* private writeHeader(name: string, fileName: number[]): Promise<any> {
-	      let data: { buffer: ArrayBuffer; array: Uint8Array; view: DataView };
-	      let date: Date = new Date();
-	      let header = getDataHelper(26);
-	      this.files[name] = {
-	        headerArray: header.array,
-	        directory: false,
-	        filename: fileName,
-	        offset: this.dataLength,
-	        comment: getBytes(encodeUTF8(''))
-	      };
-	      header.view.setUint32(0, 0x14000808);
-	      header.view.setUint16(6, (((date.getHours() << 6) | date.getMinutes()) << 5) | (date.getSeconds() / 2), true);
-	      header.view.setUint16(8, ((((date.getFullYear() - 1980) << 4) | (date.getMonth() + 1)) << 5) | date.getDate(), true);
-	      header.view.setUint16(22, fileName.length, true);
-	      data = getDataHelper(30 + fileName.length);
-	      data.view.setUint32(0, 0x504b0304);
-	      data.array.set(header.array, 4);
-	      data.array.set(fileName, 30);
-	      this.dataLength += data.array.length;
-	       return new Promise((resolve: Function, reject: Function) => {
-	        let tmpWrite: FileWriter = this.writer;
-	        tmpWrite.onwriteend = (e: ProgressEvent) => {
-	          resolve(header);
-	        };
-	        tmpWrite.onerror = () => {
-	          reject();
-	        };
-	        tmpWrite.write(new Blob([appendABViewSupported ? data.array : data.array.buffer]));
-	      });
-	      // this.writer.writeUint8Array(data.array, callback, onwriteerror);
-	    } 
-	    private writeFooter(compressedLength: number, crc32: number, reader: BlobReader, header: THeadAndFooter): Promise<any> {
-	      var footer: THeadAndFooter = getDataHelper(16);
-	      this.dataLength += compressedLength || 0;
-	      footer.view.setUint32(0, 0x504b0708);
-	      if (typeof crc32 != 'undefined') {
-	        header.view.setUint32(10, crc32, true);
-	        footer.view.setUint32(4, crc32, true);
-	      }
-	      if (reader) {
-	        footer.view.setUint32(8, compressedLength, true);
-	        header.view.setUint32(14, compressedLength, true);
-	        footer.view.setUint32(12, reader.size, true);
-	        header.view.setUint32(18, reader.size, true);
-	      }
-	       return new Promise((resolve: Function, reject: Function) => {
-	        let tmpWrite: FileWriter = this.writer;
-	        tmpWrite.onwriteend = (e: ProgressEvent) => {
-	          resolve();
-	        };
-	        tmpWrite.onerror = () => {
-	          reject();
-	        };
-	        tmpWrite.write(new Blob([appendABViewSupported ? footer.array : footer.array.buffer]));
-	      });
-	    }
-	     private async copy(reader: BlobReader, offset: number, size: number, computeCrc32: boolean): Promise<number> {
-	      let chunkIndex = 0,
-	        index,
-	        outputSize = 0,
-	        crcInput: boolean = true;
-	      let crc = new Crc32();
-	       // let outputData;
-	      // index = chunkIndex * CHUNK_SIZE;
-	      // if (index < size) {
-	      //   let inputData = await reader.readUint8Array(offset + index, Math.min(CHUNK_SIZE, size - index));
-	       //   if(inputData){
-	      //     outputSize += inputData.length;
-	      //     await this.writer.writeUint8Array()
-	      //   }
-	      // } else {
-	      // }
-	      // get all content once.
-	      let inputData: Uint8Array = await reader.readUint8Array();
-	      crc.append(inputData);
-	      await new Promise((resolve: Function, reject: Function) => {
-	        let tmpWrite: FileWriter = this.writer;
-	        tmpWrite.onwriteend = (e: ProgressEvent) => {
-	          resolve();
-	        };
-	        tmpWrite.onerror = () => {
-	          reject();
-	        };
-	        tmpWrite.write(new Blob([appendABViewSupported ? inputData : inputData.buffer]));
-	      });
-	       return crc.get();
-	    } */
-
 	  }]);
 
 	  return ZipWriter;
@@ -2054,7 +1908,7 @@
 	      offset += text.length;
 	    },
 	    i64: function i64(number, bigendian) {
-	      var buffer = new Int64(number).buffer;
+	      var buffer = new Int64(number, null).buffer;
 
 	      if (!bigendian) {
 	        // swap the by orders
@@ -2139,8 +1993,8 @@
 
 	var FilesystemIO =
 	/*#__PURE__*/
-	function (_IO) {
-	  inherits(FilesystemIO, _IO);
+	function (_SavvyIO) {
+	  inherits(FilesystemIO, _SavvyIO);
 
 	  function FilesystemIO() {
 	    var _this;
@@ -2153,25 +2007,25 @@
 	    _this.allEntries = [];
 	    _this.allResumeFiles = [];
 
-	    _this.saveLink = function (file, objectURL) {
+	    _this.saveLink = function (transfer, objectURL) {
 	      var link = typeof objectURL === 'string' && objectURL;
 	      var dlLinkNode = document.createElement('a');
-	      dlLinkNode.download = file.name;
-	      dlLinkNode.href = link || file.fileEntry.toURL();
+	      dlLinkNode.download = transfer.name;
+	      dlLinkNode.href = link || transfer.fileEntry.toURL();
 	      dlLinkNode.click();
 	    };
 
-	    _this.saveFile = function (savvyFile, file) {
+	    _this.saveFile = function (transfer, file) {
 	      try {
-	        var _file = new File([file], savvyFile.name, {
-	          type: filemime(savvyFile.name)
+	        var _file = new File([file], transfer.name, {
+	          type: filemime(transfer.name)
 	        });
 
-	        _this.saveLink(savvyFile, window.URL.createObjectURL(_file));
+	        _this.saveLink(transfer, window.URL.createObjectURL(_file));
 	      } catch (ex) {
 	        console.log(ex);
 
-	        _this.saveLink(savvyFile);
+	        _this.saveLink(transfer);
 	      }
 	    };
 
@@ -2207,7 +2061,7 @@
 
 	  createClass(FilesystemIO, [{
 	    key: "removeFile",
-	    value: function removeFile(file) {
+	    value: function removeFile(transfer) {
 	      return new Promise(function (resolve, reject) {
 	        customWindow.requestFileSystem(TEMPORARY, 0x10000, function (fs) {
 	          fs.root.getDirectory('savvy', {
@@ -2217,7 +2071,7 @@
 	            dirReader.readEntries(function (entries) {
 	              entries.forEach(function (entry) {
 	                // TO-DO: need check if this file is being write to filesystem...
-	                if (entry.name === file.name + file.id) {
+	                if (entry.name === transfer.name + transfer.id) {
 	                  entry.remove(function () {
 	                    console.log('remove file [' + entry.name + '] from filesystem successful.');
 	                    resolve();
@@ -2257,12 +2111,12 @@
 
 	  }, {
 	    key: "getFileWriter",
-	    value: function getFileWriter(file, successCallback, errorCallback) {
-	      customWindow.requestFileSystem(TEMPORARY, file.fileSize, function (fs) {
+	    value: function getFileWriter(transfer, successCallback, errorCallback) {
+	      customWindow.requestFileSystem(TEMPORARY, transfer.fileSize, function (fs) {
 	        fs.root.getDirectory('savvy', {
 	          create: true
 	        }, function (directoryEntry) {
-	          fs.root.getFile('savvy/' + file.name + file.id, {
+	          fs.root.getFile('savvy/' + transfer.name + transfer.id, {
 	            create: true
 	          }, function (fileEntry) {
 	            fileEntry.getMetadata(function (metadata) {
@@ -2270,13 +2124,13 @@
 	              fileEntry.createWriter(function (fw) {
 	                if (metadata.size && metadata.size !== 0) {
 	                  // set offset as file size, the plus op may not effective
-	                  if (file.offset === metadata.size) {
+	                  if (transfer.offset === metadata.size) {
 	                    // console.log(file.offset, metadata.size);
-	                    fw.seek(file.offset + 1);
-	                  } else if (file.offset < metadata.size) {
+	                    fw.seek(transfer.offset + 1);
+	                  } else if (transfer.offset < metadata.size) {
 	                    // console.log(file.offset + ' ,' + metadata.size + ' - finally find u!');
 	                    fw.onwriteend = function () {
-	                      fw.seek(file.offset + 1);
+	                      fw.seek(transfer.offset + 1);
 	                      successCallback({
 	                        fileEntry: fileEntry,
 	                        fileWriter: fw
@@ -2284,10 +2138,10 @@
 	                      return;
 	                    };
 
-	                    fw.truncate(file.offset);
+	                    fw.truncate(transfer.offset);
 	                  } else {
 	                    fw.seek(0);
-	                    file.abortAllResumeData();
+	                    transfer.abortAllResumeData();
 	                  }
 	                }
 
@@ -2303,22 +2157,22 @@
 	    }
 	  }, {
 	    key: "freeSpace",
-	    value: function freeSpace(files) {
+	    value: function freeSpace(transfers) {
 	      if (this.entrtiesReaded) {
 	        this.freeSpaceRequest = false;
 	        this.allEntries.forEach(function (entry) {
-	          var tmpFile = files.find(function (file) {
-	            return file.name + file.id === entry.name;
+	          var tmpTransfer = transfers.find(function (transfer) {
+	            return transfer.name + transfer.id === entry.name;
 	          }); // this file need be remove.
 
-	          if (tmpFile === undefined) {
+	          if (tmpTransfer === undefined) {
 	            entry.remove(function () {
 	              console.log(entry.name + ' removed.');
 	            }, function (err) {});
 	          }
 	        });
 	      } else {
-	        this.allResumeFiles = files;
+	        this.allResumeFiles = transfers;
 	        this.freeSpaceRequest = true;
 	      }
 	    }
@@ -2329,16 +2183,15 @@
 
 	  }, {
 	    key: "write",
-	    value: function write(file, buffer) {
+	    value: function write(transfer, buffer) {
 	      return new Promise(function (resolve, reject) {
-	        if (file.fileWriter) {
-	          var fileWriter = file.fileWriter;
+	        if (transfer.fileWriter) {
+	          var fileWriter = transfer.fileWriter;
 
-	          if (file.isZip) {
-	            var tmpZipFile = file;
+	          if (transfer.zip) {
 	            var zipWriter = createZipWriter();
-	            var currentFile = tmpZipFile.currentFile;
-	            zipWriter.add(currentFile, tmpZipFile, buffer, tmpZipFile.nowChunkIndex === tmpZipFile.chunklist.length).then(function () {
+	            var currentFile = transfer.currentFile;
+	            zipWriter.add(currentFile, transfer, buffer, transfer.chunkIndex === transfer.chunkList.length).then(function () {
 	              resolve();
 	            });
 	          } else {
@@ -2367,17 +2220,17 @@
 
 	  }, {
 	    key: "deleteFile",
-	    value: function deleteFile(file) {
+	    value: function deleteFile(transfer) {
 	      // let assume
-	      if (file.fileEntry) {
-	        var _file = file.fileEntry;
+	      if (transfer.fileEntry) {
+	        var _file = transfer.fileEntry;
 
 	        if (_file.isFile) {
 	          _file.getMetadata(function (metadata) {
 	            var delTime = metadata.size / 1024 + 30000;
 	            setTimeout(function () {
 	              _file.remove(function () {
-	                console.log('file ' + file.name + ' being removed from filesystem...');
+	                console.log('file ' + transfer.name + ' being removed from filesystem...');
 	              });
 	            }, delTime);
 	          }, function (err) {
@@ -2393,40 +2246,39 @@
 	      }
 	    }
 	    /**
-	     * @param {SavvyFile}File
-	     * @param {SavvyFile[]}Files
+	     * @param {Transfer[]}transfers
 	     * @public
 	     */
 
 	  }, {
 	    key: "download",
-	    value: function download(files) {
+	    value: function download(transfers) {
 	      var _this2 = this;
 
 	      var _loop = function _loop(i, l) {
-	        var fileEntry = files[i].fileEntry;
+	        var fileEntry = transfers[i].fileEntry;
 
-	        if (typeof files[i].fileEntry.file === 'function') {
+	        if (typeof transfers[i].fileEntry.file === 'function') {
 	          try {
 	            fileEntry.file(function (file) {
-	              _this2.saveFile(files[i], file);
+	              _this2.saveFile(transfers[i], file);
 	            }, function () {
-	              _this2.saveLink(files[i]);
+	              _this2.saveLink(transfers[i]);
 	            });
 	          } catch (e) {
 	            console.log(e);
 	          }
 	        } else {
-	          _this2.saveLink(files[i]);
+	          _this2.saveLink(transfers[i]);
 	        }
 	      };
 
-	      for (var i = 0, l = files.length; i < l; i++) {
+	      for (var i = 0, l = transfers.length; i < l; i++) {
 	        _loop(i, l);
 	      }
 	    }
 	    /**
-	     * @param {SavvyFile}file
+	     * @param {Transfer}transfer
 	     * @param {String?}objectURL
 	     * @private
 	     */
@@ -2434,14 +2286,14 @@
 	  }]);
 
 	  return FilesystemIO;
-	}(IO);
+	}(SavvyIO);
 
 	var MSIE = typeof MSBlobBuilder === 'function';
 
 	var MemoryIO =
 	/*#__PURE__*/
-	function (_IO) {
-	  inherits(MemoryIO, _IO);
+	function (_SavvyIO) {
+	  inherits(MemoryIO, _SavvyIO);
 
 	  // private size: number;
 	  function MemoryIO() {
@@ -2457,7 +2309,7 @@
 
 	  createClass(MemoryIO, [{
 	    key: "getFileWriter",
-	    value: function getFileWriter(file, successCallback, errorCallback) {
+	    value: function getFileWriter(transfer, successCallback, errorCallback) {
 	      successCallback({
 	        fileEntry: null,
 	        fileWriter: new MemoryWrite()
@@ -2465,41 +2317,41 @@
 	    }
 	  }, {
 	    key: "write",
-	    value: function write(file, buffer) {
+	    value: function write(transfer, buffer) {
 	      return new Promise(function (resolve, reject) {
 	        console.log('memory write');
 
-	        if (file.isZip) {
-	          var tmpZipFile = file;
+	        if (transfer.zip) {
+	          // let tmpZipFile: SavvyZipFile = file as SavvyZipFile;
 	          var zipWriter = createZipWriter();
-	          var currentFile = tmpZipFile.currentFile;
-	          zipWriter.add(currentFile, tmpZipFile, buffer, tmpZipFile.nowChunkIndex === tmpZipFile.chunklist.length).then(function () {
+	          var currentFile = transfer.currentFile;
+	          zipWriter.add(currentFile, transfer, buffer, transfer.chunkIndex === transfer.chunkList.length).then(function () {
 	            resolve();
 	          });
 	        } else {
-	          file.fileWriter.onwriteend = function () {
+	          transfer.fileWriter.onwriteend = function () {
 	            resolve();
 	          };
 
-	          file.fileWriter.onerror = function (e) {
+	          transfer.fileWriter.onerror = function (e) {
 	            reject();
 	          };
 
-	          file.fileWriter.write(new Blob([buffer]));
+	          transfer.fileWriter.write(new Blob([buffer]));
 	        }
 	      });
 	    }
 	  }, {
 	    key: "deleteFile",
-	    value: function deleteFile(file) {
-	      file.fileWriter.clear();
-	      file.fileWriter = null;
+	    value: function deleteFile(transfer) {
+	      transfer.fileWriter.clear();
+	      transfer.fileWriter = null;
 	    }
 	  }, {
 	    key: "download",
-	    value: function download(files) {
-	      for (var i = 0, l = files.length; i < l; i++) {
-	        var blob = files[i].fileWriter.getBlob(files[i].name);
+	    value: function download(transfers) {
+	      for (var i = 0, l = transfers.length; i < l; i++) {
+	        var blob = transfers[i].fileWriter.getBlob(transfers[i].name);
 	        var blob_url = '';
 
 	        if (MSIE) {
@@ -2507,7 +2359,7 @@
 	        } else {
 	          blob_url = window.URL.createObjectURL(blob);
 	          var dlLinkNode = document.createElement('a');
-	          dlLinkNode.download = files[i].name;
+	          dlLinkNode.download = transfers[i].name;
 	          dlLinkNode.href = blob_url;
 	          console.log(dlLinkNode);
 	          document.body.appendChild(dlLinkNode); // this click may triggers beforeunload...
@@ -2519,7 +2371,7 @@
 	  }]);
 
 	  return MemoryIO;
-	}(IO);
+	}(SavvyIO);
 
 	var MemoryWrite =
 	/*#__PURE__*/
@@ -2587,163 +2439,68 @@
 	  return MemoryWrite;
 	}();
 
-	var SavvyFile =
-	/*#__PURE__*/
-	function () {
-	  // measure unit is byte per second
-	  function SavvyFile(path, name, fileSize, chunkSize, IO_instance, progressHandle, buffacc, offset) {
-	    var _this = this;
+	var SavvyFile = function SavvyFile(path, name, fileSize, chunkSize, buffacc, offset) {
+	  classCallCheck(this, SavvyFile);
 
-	    classCallCheck(this, SavvyFile);
+	  this.chunkList = [];
+	  this.filePath = void 0;
+	  this.name = void 0;
+	  this.fileSize = void 0;
+	  this.offset = 0;
+	  this.crc = 0;
+	  this.headerPos = 0;
+	  this.bufferAcc = 0;
+	  this.filePath = path;
+	  this.name = name;
+	  this.fileSize = fileSize;
+	  this.bufferAcc = buffacc || 0;
+	  this.offset = offset || 0;
+	  var tmpStart = 0,
+	      tmpEnd = 0;
 
-	    this.id = void 0;
-	    this.isZip = false;
-	    this.chunklist = [];
-	    this.status = void 0;
-	    this.filePath = void 0;
-	    this.name = void 0;
-	    this.fileSize = void 0;
-	    this.chunkSize = void 0;
-	    this.fileWriter = void 0;
-	    this.fileEntry = void 0;
-	    this.remainSize = void 0;
-	    this.speed = 0;
-	    this.nowChunkIndex = 0;
-	    this.IO = void 0;
-	    this.startTime = 0;
-	    this.offset = 0;
-	    this.crc = 0;
-	    this.headerPos = 0;
-	    this.bufferAcc = 0;
-	    this.fileType = 'File';
-	    this.progressHandle = void 0;
-	    this.lock = false;
-	    this.processer = null;
-	    this.paused = false;
-
-	    this.init = function () {
-	      return new Promise(function (resolve, reject) {
-	        _this.IO.getFileWriter(_this, function (result) {
-	          _this.fileWriter = result.fileWriter;
-	          _this.fileEntry = result.fileEntry;
-	          console.log(result.fileWriter.position);
-
-	          if (_this.status !== 'abort') {
-	            _this.status = 'inited';
-	          }
-
-	          resolve();
-	        }, reject);
-	      });
-	    };
-
-	    this.getStatus = function () {
-	      return _this.status;
-	    };
-
-	    this.update = function (length) {
-	      if (_this.status === 'inited') {
-	        _this.status = 'downloading';
-	      }
-
-	      var duration = new Date().getTime() - _this.startTime;
-
-	      _this.speed = length / duration * 1000;
-	      _this.remainSize -= length;
-	      _this.progressHandle && _this.progressHandle(_this.id, _this.speed, _this.remainSize, _this.status);
-	    };
-
-	    this.status = 'initializing';
-	    this.filePath = path;
-	    this.name = name;
-	    this.fileSize = fileSize;
-	    this.chunkSize = chunkSize;
-	    this.IO = IO_instance;
-	    this.remainSize = fileSize;
-	    this.bufferAcc = buffacc || 0;
-	    this.offset = offset || 0;
-	    this.progressHandle = progressHandle;
-	    this.fileType = filetype(this.name);
-	    this.id = new Date().getTime();
-	    var tmpStart = 0,
-	        tmpEnd = 0;
-
-	    while (tmpEnd < this.fileSize) {
-	      tmpEnd = tmpStart + this.chunkSize;
-	      tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
-	      this.chunklist.push({
-	        filePath: this.filePath,
-	        start: tmpStart,
-	        end: tmpEnd
-	      });
-	      tmpStart = tmpEnd + 1;
-	    }
+	  while (tmpEnd < this.fileSize) {
+	    tmpEnd = tmpStart + chunkSize;
+	    tmpEnd = tmpEnd > this.fileSize ? this.fileSize : tmpEnd;
+	    this.chunkList.push({
+	      filePath: this.filePath,
+	      start: tmpStart,
+	      end: tmpEnd
+	    });
+	    tmpStart = tmpEnd + 1;
 	  }
+	};
 
-	  createClass(SavvyFile, [{
-	    key: "nextChunk",
-	    value: function nextChunk() {
-	      // make sure next chunk is available when status not chunk_empty
-	      this.startTime = new Date().getTime();
-
-	      if (!this.chunklist[this.nowChunkIndex + 1]) {
-	        this.status = 'chunk_empty';
-	      }
-
-	      return this.chunklist[this.nowChunkIndex++];
-	    }
-	  }, {
-	    key: "resumePreChunk",
-	    value: function resumePreChunk() {
-	      if (this.status === 'chunk_empty') {
-	        this.status = 'inited';
-	      }
-
-	      this.nowChunkIndex -= 1;
-	    }
-	  }]);
-
-	  return SavvyFile;
-	}();
-
-	var SavvyZipFile =
+	var Transfer =
 	/*#__PURE__*/
 	function () {
-	  // measure unit is byte per second
-	  function SavvyZipFile(files, name, IO_instance, progressHandle, statusHandle) {
+	  //include
+	  function Transfer(files, name, IO, progressHandle, statusUpdateHandle, zip, chunkIndex, id, offset, resumed) {
 	    var _this = this;
 
-	    var chunkIndex = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : 0;
-	    var id = arguments.length > 6 ? arguments[6] : undefined;
-	    var offset = arguments.length > 7 ? arguments[7] : undefined;
-	    var resumed = arguments.length > 8 ? arguments[8] : undefined;
+	    classCallCheck(this, Transfer);
 
-	    classCallCheck(this, SavvyZipFile);
-
-	    this.id = void 0;
-	    this.chunklist = [];
+	    this.files = void 0;
+	    this.name = void 0;
+	    this.fileType = 'File';
+	    this.IO = void 0;
 	    this._status = 'initializing';
-	    this.isZip = true;
+	    this.zip = void 0;
+	    this.id = void 0;
+	    this.offset = void 0;
+	    this.chunkIndex = void 0;
+	    this.chunkList = void 0;
+	    this.totalSize = void 0;
+	    this.fileSize = void 0;
+	    this.remainSize = void 0;
 	    this.fileWriter = void 0;
 	    this.fileEntry = void 0;
-	    this.name = void 0;
-	    this.fileSize = 0;
-	    this.totalSize = void 0;
-	    this.files = void 0;
-	    this.nowChunkIndex = 0;
-	    this.IO = void 0;
-	    this.offset = 0;
-	    this.dirData = [];
-	    this.remainSize = void 0;
+	    this.progressHandle = void 0;
+	    this.statusUpdateHandle = void 0;
+	    this.processer = null;
+	    this.lock = false;
+	    this.paused = false;
 	    this.speed = 0;
 	    this.startTime = 0;
-	    this.progressHandle = void 0;
-	    this.statusHandle = void 0;
-	    this.fileType = 'File';
-	    this.resumed = false;
-	    this.lock = false;
-	    this.processer = null;
-	    this.paused = false;
 
 	    this.init = function () {
 	      return new Promise(function (resolve, reject) {
@@ -2761,10 +2518,6 @@
 	      });
 	    };
 
-	    this.getStatus = function () {
-	      return _this._status;
-	    };
-
 	    this.update = function (length) {
 	      if (_this.status === 'inited') {
 	        _this.status = 'downloading';
@@ -2778,43 +2531,54 @@
 	      _this.progressHandle && _this.progressHandle(_this.id, _this.speed, _this.remainSize, _this.status);
 	    };
 
-	    this.IO = IO_instance;
-	    this.name = name;
+	    this.getStatus = function () {
+	      return _this._status;
+	    };
+
 	    this.files = files;
+	    this.name = name;
 	    this.fileType = filetype(this.name);
+	    this.IO = IO;
 	    this.id = id || new Date().getTime();
-	    this.offset = offset || 0;
+	    this.zip = zip; // set file size
+	    // -----------------------------------------------------------------\
+
 	    this.totalSize = files.reduce(function (prev, cur) {
 	      return prev + cur.fileSize;
 	    }, 0);
-	    this.progressHandle = progressHandle;
-	    this.statusHandle = statusHandle;
-	    this.nowChunkIndex = chunkIndex;
+	    this.fileSize = 0;
 
-	    for (var i = 0, l = files.length; i < l; i++) {
-	      this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length
-	      /* header */
-	      + 46 + files[i].name.length
-	      /* dirRecord */
-	      ;
-	    } // extra bytes for each ZipCentralDirectory
+	    if (zip) {
+	      for (var i = 0, l = files.length; i < l; i++) {
+	        this.fileSize += files[i].fileSize + 30 + 9 + 2 * files[i].name.length
+	        /* header */
+	        + 46 + files[i].name.length
+	        /* dirRecord */
+	        ;
+	      } // extra bytes for each ZipCentralDirectory
 
 
-	    this.fileSize += files.length * 28; // extra bytes for each dataDescriptor
+	      this.fileSize += files.length * 28; // extra bytes for each dataDescriptor
 
-	    this.fileSize += files.length * 24; // final bytes
+	      this.fileSize += files.length * 24; // final bytes
 
-	    this.fileSize += 98;
-	    this.chunklist = files.reduce(function (pre, file) {
-	      return pre.concat(file.chunklist);
+	      this.fileSize += 98;
+	    } else {
+	      this.fileSize = this.totalSize;
+	    } // -----------------------------------------------------------------
+
+
+	    this.chunkList = files.reduce(function (pre, file) {
+	      return pre.concat(file.chunkList);
 	    }, []);
-	    this.resumed = resumed || false;
+	    this.offset = offset || 0;
+	    this.chunkIndex = chunkIndex || 0;
 
-	    if (chunkIndex === this.chunklist.length) {
+	    if (this.chunkIndex === this.chunkList.length) {
 	      this.remainSize = 0;
-	    } else if (chunkIndex !== 0) {
-	      this.remainSize = this.totalSize - this.chunklist.reduce(function (acc, cur, index) {
-	        if (index < chunkIndex) {
+	    } else if (this.chunkIndex !== 0) {
+	      this.remainSize = this.totalSize - this.chunkList.reduce(function (acc, cur, index) {
+	        if (index < _this.chunkIndex) {
 	          acc += cur.end - (cur.start === 0 ? 0 : cur.start - 1);
 	        } else {
 	          acc += 0;
@@ -2825,12 +2589,15 @@
 	    } else {
 	      this.remainSize = this.totalSize;
 	    }
+
+	    this.progressHandle = progressHandle;
+	    this.statusUpdateHandle = statusUpdateHandle;
 	  }
 
-	  createClass(SavvyZipFile, [{
+	  createClass(Transfer, [{
 	    key: "abortAllResumeData",
 	    value: function abortAllResumeData() {
-	      this.nowChunkIndex = 0;
+	      this.chunkIndex = 0;
 	      this.remainSize = this.totalSize;
 	      this.offset = 0;
 	      this.files.forEach(function (file) {
@@ -2842,12 +2609,12 @@
 	    value: function nextChunk() {
 	      this.startTime = new Date().getTime(); // make sure next chunk is available when status not chunk_empty
 
-	      if (!this.chunklist[this.nowChunkIndex + 1]) {
+	      if (!this.chunkList[this.chunkIndex + 1]) {
 	        this.status = 'chunk_empty';
 	      } // console.log('request chunk: ' + this.chunklist[this.nowChunkIndex].start + '-' + this.chunklist[this.nowChunkIndex].end + ' at ' + this.startTime);
 
 
-	      return this.chunklist[this.nowChunkIndex++];
+	      return this.chunkList[this.chunkIndex++];
 	    }
 	  }, {
 	    key: "resumePreChunk",
@@ -2856,17 +2623,32 @@
 	        this.status = 'downloading';
 	      }
 
-	      this.nowChunkIndex -= 1;
+	      this.chunkIndex -= 1;
 	    }
+	  }, {
+	    key: "status",
+	    get: function get() {
+	      return this._status;
+	    },
+	    set: function set(new_status) {
+	      this._status = new_status;
+	      this.statusUpdateHandle && this.statusUpdateHandle(this.id, new_status);
+	    }
+	    /**
+	     * use @function getStatus() to get file's current status instead of accessing it directly
+	     * so this is done to avoid errors during ts static checking
+	     * @ref https://github.com/Microsoft/TypeScript/issues/29155
+	     */
+
 	  }, {
 	    key: "currentFile",
 	    get: function get() {
-	      var tmpNowChunkIndex = this.nowChunkIndex - 1;
+	      var tmpNowChunkIndex = this.chunkIndex - 1;
 	      var numChunks = 0;
 	      var tmpNowFile = this.files[0];
 
 	      for (var i = 0, l = this.files.length; i < l; i++) {
-	        numChunks += this.files[i].chunklist.length;
+	        numChunks += this.files[i].chunkList.length;
 
 	        if (tmpNowChunkIndex < numChunks) {
 	          tmpNowFile = this.files[i];
@@ -2876,24 +2658,232 @@
 
 	      return tmpNowFile;
 	    }
-	  }, {
-	    key: "status",
-	    get: function get() {
-	      return this._status;
-	    },
-	    set: function set(new_status) {
-	      this._status = new_status;
-	      this.statusHandle && this.statusHandle(this.id, new_status);
-	    }
+	  }]);
+
+	  return Transfer;
+	}();
+
+	var TransferProcesser =
+	/*#__PURE__*/
+	function () {
+	  function TransferProcesser() {
+	    var _this = this;
+
+	    classCallCheck(this, TransferProcesser);
+
+	    this.idle = true;
+	    this.transfer = null;
+
+	    this.process =
+	    /*#__PURE__*/
+	    function () {
+	      var _ref = asyncToGenerator(
+	      /*#__PURE__*/
+	      regenerator.mark(function _callee(transfer, scheduler) {
+	        var nextChunk, response, buffer;
+	        return regenerator.wrap(function _callee$(_context) {
+	          while (1) {
+	            switch (_context.prev = _context.next) {
+	              case 0:
+	                if (transfer.paused) {
+	                  _context.next = 65;
+	                  break;
+	                }
+
+	                if (!(transfer.getStatus() === 'abort')) {
+	                  _context.next = 9;
+	                  break;
+	                }
+
+	                // delete this file.
+	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_transfer) {
+	                  return _transfer.id === _transfer.id;
+	                }), 1);
+	                _this.idle = true;
+	                _this.transfer = null;
+	                transfer.lock = false;
+	                transfer.processer = null;
+	                scheduler.distributeToProcessers();
+	                return _context.abrupt("return");
+
+	              case 9:
+	                if (!(transfer.chunkIndex >= transfer.chunkList.length)) {
+	                  _context.next = 22;
+	                  break;
+	                }
+
+	                scheduler.IO.download([transfer]);
+	                transfer.status = 'complete';
+	                scheduler.storeFileForResume(transfer);
+	                scheduler.IO.deleteFile(transfer);
+	                scheduler.totalSize -= transfer.fileSize; // delete this file.
+
+	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_transfer) {
+	                  return _transfer.id === _transfer.id;
+	                }), 1);
+	                _this.idle = true;
+	                _this.transfer = null;
+	                transfer.lock = false;
+	                transfer.processer = null;
+	                scheduler.distributeToProcessers();
+	                return _context.abrupt("return");
+
+	              case 22:
+	                if (transfer.fileWriter) {
+	                  _context.next = 27;
+	                  break;
+	                }
+
+	                _context.next = 25;
+	                return transfer.init();
+
+	              case 25:
+	                _this.run(transfer, scheduler);
+
+	                return _context.abrupt("return");
+
+	              case 27:
+	                // file.status should be inited
+	                nextChunk = transfer.nextChunk();
+	                _context.next = 30;
+	                return fetch(nextChunk.filePath, {
+	                  method: 'GET',
+	                  headers: {
+	                    Range: "bytes=".concat(nextChunk.start, "-").concat(nextChunk.end)
+	                  }
+	                });
+
+	              case 30:
+	                response = _context.sent;
+
+	                if (!transfer.paused) {
+	                  _context.next = 38;
+	                  break;
+	                }
+
+	                // throw this chunk
+	                transfer.resumePreChunk();
+	                transfer.lock = false;
+	                transfer.processer = null;
+	                _this.idle = true;
+
+	                if (transfer.status !== 'abort') {
+	                  transfer.status = 'paused';
+	                }
+
+	                return _context.abrupt("return");
+
+	              case 38:
+	                _context.next = 40;
+	                return response.arrayBuffer();
+
+	              case 40:
+	                buffer = _context.sent;
+
+	                if (!transfer.paused) {
+	                  _context.next = 49;
+	                  break;
+	                }
+
+	                // throw this chunk
+	                transfer.resumePreChunk();
+	                transfer.paused = true;
+	                transfer.lock = false;
+	                transfer.processer = null;
+	                _this.idle = true;
+
+	                if (transfer.status !== 'abort') {
+	                  transfer.status = 'paused';
+	                }
+
+	                return _context.abrupt("return");
+
+	              case 49:
+	                _context.next = 51;
+	                return scheduler.IO.write(transfer, buffer);
+
+	              case 51:
+	                if (!(transfer.getStatus() === 'abort')) {
+	                  _context.next = 59;
+	                  break;
+	                }
+
+	                // delete this file.
+	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_transfer) {
+	                  return _transfer.id === _transfer.id;
+	                }), 1);
+	                _this.idle = true;
+	                _this.transfer = null;
+	                transfer.lock = false;
+	                transfer.processer = null;
+	                scheduler.distributeToProcessers();
+	                return _context.abrupt("return");
+
+	              case 59:
+	                transfer.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+
+	                scheduler.storeFileForResume(transfer);
+
+	                _this.run(transfer, scheduler);
+
+	                return _context.abrupt("return");
+
+	              case 65:
+	                if (transfer.status !== 'abort') {
+	                  transfer.status = 'paused';
+	                }
+
+	                transfer.processer = null;
+	                transfer.lock = false;
+	                _this.idle = true;
+
+	              case 69:
+	              case "end":
+	                return _context.stop();
+	            }
+	          }
+	        }, _callee, this);
+	      }));
+
+	      return function (_x, _x2) {
+	        return _ref.apply(this, arguments);
+	      };
+	    }();
+	  }
+
+	  createClass(TransferProcesser, [{
+	    key: "run",
+
 	    /**
 	     * use @function getStatus() to get file's current status instead of accessing it directly
 	     * so this is done to avoid errors during ts static checking
 	     * @ref https://github.com/Microsoft/TypeScript/issues/29155
 	     */
+	    value: function run(transfer, scheduler) {
+	      transfer.processer = this;
+	      this.transfer = transfer;
+	      this.idle = false;
 
+	      if (!transfer.lock) {
+	        transfer.lock = true;
+	      }
+
+	      if (!transfer.paused) {
+	        transfer.status = 'downloading';
+	        this.process(transfer, scheduler);
+	      } else {
+	        transfer.lock = false;
+	        transfer.processer = null;
+	        this.idle = true;
+
+	        if (transfer.status !== 'abort') {
+	          transfer.status = 'paused';
+	        }
+	      }
+	    }
 	  }]);
 
-	  return SavvyZipFile;
+	  return TransferProcesser;
 	}();
 
 	var IS64BIT = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.test(navigator.userAgent);
@@ -2901,6 +2891,7 @@
 	var SavvyTransfer =
 	/*#__PURE__*/
 	function () {
+	  // public files: Array<SavvyFile | SavvyZipFile> = [];
 	  function SavvyTransfer(onProgress, onStatusUpdate) {
 	    var _this = this;
 
@@ -2915,29 +2906,29 @@
 	    this.progressHandle = void 0;
 	    this.statusUpdateHandle = void 0;
 	    this.running = false;
-	    this.files = [];
+	    this.transfers = [];
 	    this.schedulingFiles = [];
 	    this.processers = [];
 
 	    this.schedule = function (ids) {
 	      // fill into schedulingFiles
-	      var tmpIds = ids || _this.files.map(function (file) {
-	        return file.id;
+	      var tmpIds = ids || _this.transfers.map(function (transfer) {
+	        return transfer.id;
 	      });
 
 	      var nonRepeatIds = Array.from(new Set(tmpIds));
 
 	      var _loop = function _loop(i, l) {
-	        var tmpSavvyFile = _this.files.find(function (_file) {
-	          return _file.id === nonRepeatIds[i];
+	        var tmpTransfer = _this.transfers.find(function (transfer) {
+	          return transfer.id === nonRepeatIds[i];
 	        });
 
-	        if (tmpSavvyFile && _this.schedulingFiles.filter(function (file) {
-	          return file.id === nonRepeatIds[i];
+	        if (tmpTransfer && _this.schedulingFiles.filter(function (transfer) {
+	          return transfer.id === nonRepeatIds[i];
 	        }).length <= 0) {
-	          tmpSavvyFile.status = 'queue';
+	          tmpTransfer.status = 'queue';
 
-	          _this.schedulingFiles.push(tmpSavvyFile);
+	          _this.schedulingFiles.push(tmpTransfer);
 	        }
 	      };
 
@@ -2961,7 +2952,7 @@
 	    this.statusUpdateHandle = onStatusUpdate;
 
 	    this.processers = new Array(this.HTTP_NUM).fill('').map(function (_) {
-	      return new Processer();
+	      return new TransferProcesser();
 	    });
 	  }
 	  /**
@@ -2980,19 +2971,14 @@
 	        var resumeData;
 
 	        try {
-	          var _this$files;
+	          var _this$transfers;
 
 	          resumeData = JSON.parse(rawResumeData);
 
-	          (_this$files = this.files).push.apply(_this$files, toConsumableArray(resumeData.map(function (data) {
-	            if (data.type === 'zip') {
-	              // files: SavvyFile[], name: string, IO_instance: FilesystemIO | MemoryIO, progressHandle: Function, chunkIndex: number = 0, id?: number, offset?: number, resumed?: boolean
-	              return new SavvyZipFile(data.files.map(function (_file) {
-	                return new SavvyFile(_file.path, _file.name, _file.size, _this2.CHUNK_SIZE, _this2.IO, _this2.progressHandle, _this2.IO_IS_FS && _file.bufferAcc || 0, _this2.IO_IS_FS && _file.offset || 0);
-	              }), data.name, _this2.IO, _this2.progressHandle, _this2.statusUpdateHandle, _this2.IO_IS_FS && data.chunkIndex || 0, data.id, _this2.IO_IS_FS && data.offset || 0, true);
-	            } else {
-	              return new SavvyFile(data.path, data.name, data.size, _this2.CHUNK_SIZE, _this2.IO, _this2.progressHandle);
-	            }
+	          (_this$transfers = this.transfers).push.apply(_this$transfers, toConsumableArray(resumeData.map(function (data) {
+	            return new Transfer(data.files.map(function (_file) {
+	              return new SavvyFile(_file.path, _file.name, _file.size, _this2.CHUNK_SIZE, _file.bufferAcc, _file.offset);
+	            }), data.name, _this2.IO, _this2.progressHandle, _this2.statusUpdateHandle, true, data.chunkIndex, data.id, data.offset, true);
 	          })));
 	        } catch (e) {
 	          console.log(e);
@@ -3000,36 +2986,32 @@
 	      }
 
 	      if (this.IO_IS_FS) {
-	        this.IO.freeSpace(this.files);
+	        this.IO.freeSpace(this.transfers);
 	      }
 
-	      return this.files;
+	      return this.transfers;
 	    }
 	    /**
 	     * resumeData@type TResumeData
-	     * @param {SavvyZipFile | SavvyFile} fileForUpdate
+	     * @param {Transfer} transferForUpdate
 	     */
 
 	  }, {
 	    key: "storeFileForResume",
-	    value: function storeFileForResume(fileForUpdate) {
-	      // temporarily support {SavvyZipFile} only.
-	      fileForUpdate = fileForUpdate;
-
-	      if (fileForUpdate.status === 'complete') {
-	        this.deleteFileFromStore(fileForUpdate);
+	    value: function storeFileForResume(transferForUpdate) {
+	      if (transferForUpdate.status === 'complete') {
+	        this.deleteFileFromStore(transferForUpdate);
 	        return;
 	      }
 
 	      var resumeDataForFile = {
-	        id: fileForUpdate.id,
-	        name: fileForUpdate.name,
-	        type: 'zip',
-	        chunkIndex: fileForUpdate.nowChunkIndex,
-	        tag: fileForUpdate.nowChunkIndex === fileForUpdate.chunklist.length ? 1 : 0,
-	        offset: fileForUpdate.offset,
-	        dirData: fileForUpdate.dirData,
-	        files: fileForUpdate.files.map(function (_file) {
+	        id: transferForUpdate.id,
+	        name: transferForUpdate.name,
+	        type: transferForUpdate.zip ? 'zip' : 'normal',
+	        chunkIndex: transferForUpdate.chunkIndex,
+	        tag: transferForUpdate.chunkIndex === transferForUpdate.chunkList.length ? 1 : 0,
+	        offset: transferForUpdate.offset,
+	        files: transferForUpdate.files.map(function (_file) {
 	          return {
 	            name: _file.name,
 	            path: _file.filePath,
@@ -3068,12 +3050,12 @@
 	    }
 	    /**
 	     * resumeData@type TResumeData
-	     * @param {SavvyZipFile | SavvyFile} fileNeedDelete
+	     * @param {Transfer} transferNeedDelete
 	     */
 
 	  }, {
 	    key: "deleteFileFromStore",
-	    value: function deleteFileFromStore(fileNeedDelete) {
+	    value: function deleteFileFromStore(transferNeedDelete) {
 	      var rawResumeData = window.localStorage.getItem('savvy_transfers');
 
 	      if (rawResumeData) {
@@ -3082,7 +3064,7 @@
 	        try {
 	          tmpResumeData = JSON.parse(rawResumeData);
 	          var index = tmpResumeData.findIndex(function (data) {
-	            return data.id === fileNeedDelete.id;
+	            return data.id === transferNeedDelete.id;
 	          });
 
 	          if (index !== -1) {
@@ -3102,12 +3084,14 @@
 	      var _addFiles = asyncToGenerator(
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee(files) {
+	        var _this3 = this;
+
 	        var asZip,
 	            tmpFiles,
 	            i,
 	            l,
 	            tmpFile,
-	            tmpZipFile,
+	            tmpTransfer,
 	            _args = arguments;
 	        return regenerator.wrap(function _callee$(_context) {
 	          while (1) {
@@ -3125,7 +3109,7 @@
 
 	                _context.prev = 4;
 	                _context.next = 7;
-	                return this._addFile(files[i].path, files[i].name, asZip);
+	                return this.addFile(files[i].path, files[i].name);
 
 	              case 7:
 	                tmpFile = _context.sent;
@@ -3154,14 +3138,16 @@
 	                }
 
 	                // create a zip file
-	                tmpZipFile = new SavvyZipFile(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle, this.statusUpdateHandle);
-	                this.files.push(tmpZipFile); // store in locastorage for resume
+	                tmpTransfer = new Transfer(tmpFiles, "Archive-".concat(generateId(4), ".zip"), this.IO, this.progressHandle, this.statusUpdateHandle, true);
+	                this.transfers.push(tmpTransfer); // store in locastorage for resume
 
-	                this.storeFileForResume(tmpZipFile);
-	                return _context.abrupt("return", tmpZipFile);
+	                this.storeFileForResume(tmpTransfer);
+	                return _context.abrupt("return", tmpTransfer);
 
 	              case 24:
-	                return _context.abrupt("return", tmpFiles);
+	                return _context.abrupt("return", tmpFiles.map(function (file) {
+	                  return new Transfer([file], file.name, _this3.IO, _this3.progressHandle, _this3.statusUpdateHandle, false);
+	                }));
 
 	              case 25:
 	              case "end":
@@ -3180,20 +3166,76 @@
 	  }, {
 	    key: "addFile",
 	    value: function () {
-	      var _addFile2 = asyncToGenerator(
+	      var _addFile = asyncToGenerator(
 	      /*#__PURE__*/
 	      regenerator.mark(function _callee2(path, name) {
+	        var response, fileSize, tmpFile;
 	        return regenerator.wrap(function _callee2$(_context2) {
 	          while (1) {
 	            switch (_context2.prev = _context2.next) {
 	              case 0:
-	                _context2.next = 2;
-	                return this._addFile(path, name);
+	                if (path) {
+	                  _context2.next = 3;
+	                  break;
+	                }
 
-	              case 2:
-	                return _context2.abrupt("return", this.files);
+	                console.log('file path invalid.');
+	                throw new Error('Invalid file path');
 
 	              case 3:
+	                _context2.next = 5;
+	                return fetch(path, {
+	                  method: 'GET',
+	                  headers: {
+	                    Range: 'bytes=0-1'
+	                  }
+	                });
+
+	              case 5:
+	                response = _context2.sent;
+
+	                if (response.headers.get('content-range')) {
+	                  _context2.next = 9;
+	                  break;
+	                }
+
+	                console.log('can not get file size, check file path or contact service provider.'); // let message = 'can not get file size, check file path or contact service provider.';
+
+	                throw new Error('Can not get file size, check file path or contact service provider.');
+
+	              case 9:
+	                // calculate whether the size limit is exceeded
+	                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
+
+	                if (!(fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT)) {
+	                  _context2.next = 13;
+	                  break;
+	                }
+
+	                console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.'); // let message = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
+
+	                throw new Error('exceed');
+
+	              case 13:
+	                // create new file
+	                tmpFile = new SavvyFile(path, name, fileSize, this.CHUNK_SIZE); // ensure each file get it's writer from IO
+	                // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
+	                //  in other word, this savvyfile does not need a writer(init);
+
+	                /* if (!asZip) {
+	                  this.files.push(tmpFile);
+	                } */
+
+	                this.totalSize += tmpFile.fileSize;
+	                _context2.next = 17;
+	                return new Promise(function (resolve, reject) {
+	                  setTimeout(resolve, 1);
+	                });
+
+	              case 17:
+	                return _context2.abrupt("return", tmpFile);
+
+	              case 18:
 	              case "end":
 	                return _context2.stop();
 	            }
@@ -3202,122 +3244,34 @@
 	      }));
 
 	      function addFile(_x2, _x3) {
-	        return _addFile2.apply(this, arguments);
+	        return _addFile.apply(this, arguments);
 	      }
 
 	      return addFile;
 	    }()
-	  }, {
-	    key: "_addFile",
-	    value: function () {
-	      var _addFile3 = asyncToGenerator(
-	      /*#__PURE__*/
-	      regenerator.mark(function _callee3(path, name) {
-	        var asZip,
-	            response,
-	            fileSize,
-	            tmpFile,
-	            _args3 = arguments;
-	        return regenerator.wrap(function _callee3$(_context3) {
-	          while (1) {
-	            switch (_context3.prev = _context3.next) {
-	              case 0:
-	                asZip = _args3.length > 2 && _args3[2] !== undefined ? _args3[2] : false;
-
-	                if (path) {
-	                  _context3.next = 4;
-	                  break;
-	                }
-
-	                console.log('file path invalid.');
-	                throw new Error('Invalid file path');
-
-	              case 4:
-	                _context3.next = 6;
-	                return fetch(path, {
-	                  method: 'GET',
-	                  headers: {
-	                    Range: 'bytes=0-1'
-	                  }
-	                });
-
-	              case 6:
-	                response = _context3.sent;
-
-	                if (response.headers.get('content-range')) {
-	                  _context3.next = 10;
-	                  break;
-	                }
-
-	                console.log('can not get file size, check file path or contact service provider.'); // let message = 'can not get file size, check file path or contact service provider.';
-
-	                throw new Error('Can not get file size, check file path or contact service provider.');
-
-	              case 10:
-	                // calculate whether the size limit is exceeded
-	                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
-
-	                if (!(fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT)) {
-	                  _context3.next = 14;
-	                  break;
-	                }
-
-	                console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.'); // let message = 'The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.';
-
-	                throw new Error('exceed');
-
-	              case 14:
-	                // create new file
-	                tmpFile = new SavvyFile(path, name, fileSize, this.CHUNK_SIZE, this.IO, this.progressHandle); // ensure each file get it's writer from IO
-	                // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
-	                //  in other word, this savvyfile does not need a writer(init);
-
-	                if (!asZip) {
-	                  this.files.push(tmpFile);
-	                }
-
-	                this.totalSize += tmpFile.fileSize;
-	                _context3.next = 19;
-	                return new Promise(function (resolve, reject) {
-	                  setTimeout(resolve, 1);
-	                });
-
-	              case 19:
-	                return _context3.abrupt("return", tmpFile);
-
-	              case 20:
-	              case "end":
-	                return _context3.stop();
-	            }
-	          }
-	        }, _callee3, this);
-	      }));
-
-	      function _addFile(_x4, _x5) {
-	        return _addFile3.apply(this, arguments);
-	      }
-
-	      return _addFile;
-	    }()
 	    /**
-	     * @param {Array<SavvyFile | SavvyZipFile>[]} files
+	     * @param {Array<Transfer>[]} transfers
 	     * pause files' processers which id within ids
 	     */
 
 	  }, {
 	    key: "pause",
-	    value: function pause(files) {
+	    value: function pause(transfers) {
 	      if (this.running) {
-	        files.map(function (file) {
+	        transfers.map(function (transfer) {
 	          // some file in ids may had being resumed.
 	          // we just need care about those files which have freezed processors.
-	          if (file.processer && !file.processer.freeze) {
+	          if (transfer.processer) {
 	            // tmpFile.processer.freeze = true;
-	            file.paused = true;
-	          } else if (!file.processer) {
-	            file.paused = true; // 有两种情况: 1. 当前file在待处理队列中, 但还没有分配处理单元  2. 不在队列中
-
-	            file.status = 'paused';
+	            transfer.paused = true;
+	          } else {
+	            /**
+	             * two possible conditions:
+	             * 1. current transfer is not in queue.
+	             * 2. in queue, waiting for distribute.
+	             * */
+	            transfer.paused = true;
+	            transfer.status = 'paused';
 	          }
 	        });
 	        return true;
@@ -3326,23 +3280,23 @@
 	      return false;
 	    }
 	    /**
-	     * @param {Array<SavvyFile | SavvyZipFile>[]} files
+	     * @param {Array<Transfer>[]} transfers
 	     * resume files' processers which id within ids.
 	     */
 
 	  }, {
 	    key: "resume",
-	    value: function resume(files) {
-	      var _this3 = this;
+	    value: function resume(transfers) {
+	      var _this4 = this;
 
-	      files.map(function (file) {
-	        file.paused = false;
+	      transfers.map(function (transfer) {
+	        transfer.paused = false;
 
-	        _this3.schedule([file.id]);
+	        _this4.schedule([transfer.id]);
 	      });
 	    }
 	    /**
-	     * @param {SavvyFile | SavvyZipFile} file
+	     * @param {Transfer} transfer
 	     * @returns SavvyFile | SavvyZipFile | undefined
 	     * remove file
 	     * 1. pause its processor if there has one.
@@ -3352,16 +3306,16 @@
 
 	  }, {
 	    key: "removeFile",
-	    value: function removeFile(file) {
-	      if (file && file.status !== 'abort') {
-	        file.paused = true;
-	        file.status = 'abort';
-	        this.totalSize -= file.fileSize;
-	        this.IO.deleteFile(file);
-	        this.deleteFileFromStore(file);
+	    value: function removeFile(transfer) {
+	      if (transfer && transfer.status !== 'abort') {
+	        transfer.paused = true;
+	        transfer.status = 'abort';
+	        this.totalSize -= transfer.fileSize;
+	        this.IO.deleteFile(transfer);
+	        this.deleteFileFromStore(transfer);
 	      }
 
-	      return file;
+	      return transfer;
 	    }
 	    /**
 	     * @param {number[]?} ids
@@ -3382,12 +3336,12 @@
 
 	        for (var i = 0, l = this.processers.length; i < l; i++) {
 	          if (this.processers[i].idle) {
-	            var currentFile = this.schedulingFiles.find(function (file) {
-	              return file && file.status !== 'abort' && file.status !== 'complete' && !file.lock && !file.paused || false;
+	            var currentTransfer = this.schedulingFiles.find(function (transfer) {
+	              return transfer && transfer.status !== 'abort' && transfer.status !== 'complete' && !transfer.lock && !transfer.paused || false;
 	            });
 
-	            if (currentFile) {
-	              this.processers[i].run(currentFile, this);
+	            if (currentTransfer) {
+	              this.processers[i].run(currentTransfer, this);
 	            }
 	          }
 	        }
@@ -3400,239 +3354,6 @@
 
 	  return SavvyTransfer;
 	}();
-
-	var Processer =
-	/*#__PURE__*/
-	function () {
-	  function Processer() {
-	    var _this4 = this;
-
-	    classCallCheck(this, Processer);
-
-	    this.idle = true;
-	    this.file = null;
-
-	    this.process =
-	    /*#__PURE__*/
-	    function () {
-	      var _ref = asyncToGenerator(
-	      /*#__PURE__*/
-	      regenerator.mark(function _callee4(file, scheduler) {
-	        var nextChunk, response, buffer;
-	        return regenerator.wrap(function _callee4$(_context4) {
-	          while (1) {
-	            switch (_context4.prev = _context4.next) {
-	              case 0:
-	                if (file.paused) {
-	                  _context4.next = 65;
-	                  break;
-	                }
-
-	                if (!(file.getStatus() === 'abort')) {
-	                  _context4.next = 9;
-	                  break;
-	                }
-
-	                // delete this file.
-	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
-	                  return _file.id === file.id;
-	                }), 1);
-	                _this4.idle = true;
-	                _this4.file = null;
-	                file.lock = false;
-	                file.processer = null;
-	                scheduler.distributeToProcessers();
-	                return _context4.abrupt("return");
-
-	              case 9:
-	                if (!(file.nowChunkIndex >= file.chunklist.length)) {
-	                  _context4.next = 22;
-	                  break;
-	                }
-
-	                scheduler.IO.download([file]);
-	                file.status = 'complete';
-	                scheduler.storeFileForResume(file);
-	                scheduler.IO.deleteFile(file);
-	                scheduler.totalSize -= file.fileSize; // delete this file.
-
-	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
-	                  return _file.id === file.id;
-	                }), 1);
-	                _this4.idle = true;
-	                _this4.file = null;
-	                file.lock = false;
-	                file.processer = null;
-	                scheduler.distributeToProcessers();
-	                return _context4.abrupt("return");
-
-	              case 22:
-	                if (file.fileWriter) {
-	                  _context4.next = 27;
-	                  break;
-	                }
-
-	                _context4.next = 25;
-	                return file.init();
-
-	              case 25:
-	                _this4.run(file, scheduler);
-
-	                return _context4.abrupt("return");
-
-	              case 27:
-	                // file.status should be inited
-	                nextChunk = file.nextChunk();
-	                _context4.next = 30;
-	                return fetch(nextChunk.filePath, {
-	                  method: 'GET',
-	                  headers: {
-	                    Range: "bytes=".concat(nextChunk.start, "-").concat(nextChunk.end)
-	                  }
-	                });
-
-	              case 30:
-	                response = _context4.sent;
-
-	                if (!file.paused) {
-	                  _context4.next = 38;
-	                  break;
-	                }
-
-	                // throw this chunk
-	                file.resumePreChunk();
-	                file.lock = false;
-	                file.processer = null;
-	                _this4.idle = true;
-
-	                if (file.status !== 'abort') {
-	                  file.status = 'paused';
-	                }
-
-	                return _context4.abrupt("return");
-
-	              case 38:
-	                _context4.next = 40;
-	                return response.arrayBuffer();
-
-	              case 40:
-	                buffer = _context4.sent;
-
-	                if (!file.paused) {
-	                  _context4.next = 49;
-	                  break;
-	                }
-
-	                // throw this chunk
-	                file.resumePreChunk();
-	                file.paused = true;
-	                file.lock = false;
-	                file.processer = null;
-	                _this4.idle = true;
-
-	                if (file.status !== 'abort') {
-	                  file.status = 'paused';
-	                }
-
-	                return _context4.abrupt("return");
-
-	              case 49:
-	                _context4.next = 51;
-	                return scheduler.IO.write(file, buffer);
-
-	              case 51:
-	                if (!(file.getStatus() === 'abort')) {
-	                  _context4.next = 59;
-	                  break;
-	                }
-
-	                // delete this file.
-	                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_file) {
-	                  return _file.id === file.id;
-	                }), 1);
-	                _this4.idle = true;
-	                _this4.file = null;
-	                file.lock = false;
-	                file.processer = null;
-	                scheduler.distributeToProcessers();
-	                return _context4.abrupt("return");
-
-	              case 59:
-	                file.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
-
-	                scheduler.storeFileForResume(file);
-
-	                _this4.run(file, scheduler);
-
-	                return _context4.abrupt("return");
-
-	              case 65:
-	                if (file.status !== 'abort') {
-	                  file.status = 'paused';
-	                }
-
-	                file.processer = null;
-	                file.lock = false;
-	                _this4.idle = true;
-
-	              case 69:
-	              case "end":
-	                return _context4.stop();
-	            }
-	          }
-	        }, _callee4, this);
-	      }));
-
-	      return function (_x6, _x7) {
-	        return _ref.apply(this, arguments);
-	      };
-	    }();
-	  }
-
-	  createClass(Processer, [{
-	    key: "run",
-
-	    /**
-	     * use @function getStatus() to get file's current status instead of accessing it directly
-	     * so this is done to avoid errors during ts static checking
-	     * @ref https://github.com/Microsoft/TypeScript/issues/29155
-	     */
-	    value: function run(file, scheduler) {
-	      file.processer = this;
-	      this.file = file;
-	      this.idle = false;
-
-	      if (!file.lock) {
-	        file.lock = true;
-	      }
-
-	      if (!file.paused) {
-	        file.status = 'downloading';
-	        this.process(file, scheduler);
-	      } else {
-	        file.lock = false;
-	        file.processer = null;
-	        this.idle = true;
-
-	        if (file.status !== 'abort') {
-	          file.status = 'paused';
-	        }
-	      }
-	    }
-	  }]);
-
-	  return Processer;
-	}();
-
-	function dec2hex(dec) {
-	  return ('0' + dec.toString(16)).substr(-2);
-	}
-
-	function generateId(len) {
-	  var arr = new Uint8Array((len || 40) / 2);
-	  window.crypto.getRandomValues(arr);
-	  return Array.from(arr, dec2hex).join('');
-	}
 
 	return SavvyTransfer;
 

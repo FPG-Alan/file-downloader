@@ -102,7 +102,7 @@ export default class SavvyZipFile {
       this.remainSize = this.totalSize;
     }
   }
-  public init = (): Promise<undefined> => {
+  /* public init = (): Promise<undefined> => {
     return new Promise((resolve: Function, reject: Function) => {
       this.IO.getFileWriter(
         this,
@@ -118,76 +118,76 @@ export default class SavvyZipFile {
         reject
       );
     });
-  };
+  }; */
 
-  public abortAllResumeData() {
-    this.nowChunkIndex = 0;
-    this.remainSize = this.totalSize;
-    this.offset = 0;
-    this.files.forEach((file: SavvyFile) => {
-      file.offset = file.bufferAcc = 0;
-    });
-  }
+  // public abortAllResumeData() {
+  //   this.nowChunkIndex = 0;
+  //   this.remainSize = this.totalSize;
+  //   this.offset = 0;
+  //   this.files.forEach((file: SavvyFile) => {
+  //     file.offset = file.bufferAcc = 0;
+  //   });
+  // }
 
-  public get currentFile(): SavvyFile {
-    let tmpNowChunkIndex = this.nowChunkIndex - 1;
-    let numChunks: number = 0;
-    let tmpNowFile: SavvyFile = this.files[0];
+  // public get currentFile(): SavvyFile {
+  //   let tmpNowChunkIndex = this.nowChunkIndex - 1;
+  //   let numChunks: number = 0;
+  //   let tmpNowFile: SavvyFile = this.files[0];
 
-    for (let i = 0, l = this.files.length; i < l; i++) {
-      numChunks += this.files[i].chunklist.length;
-      if (tmpNowChunkIndex < numChunks) {
-        tmpNowFile = this.files[i];
-        break;
-      }
-    }
-    return tmpNowFile;
-  }
-  public get status(): TStatus {
-    return this._status;
-  }
-  public set status(new_status: TStatus) {
-    this._status = new_status;
-    this.statusHandle && this.statusHandle(this.id, new_status);
-  }
-  /**
-   * use @function getStatus() to get file's current status instead of accessing it directly
-   * so this is done to avoid errors during ts static checking
-   * @ref https://github.com/Microsoft/TypeScript/issues/29155
-   */
-  public getStatus = (): TStatus => {
-    return this._status;
-  };
-  public update = (length: number) => {
-    if (this.status === 'inited') {
-      this.status = 'downloading';
-    }
+  //   for (let i = 0, l = this.files.length; i < l; i++) {
+  //     numChunks += this.files[i].chunklist.length;
+  //     if (tmpNowChunkIndex < numChunks) {
+  //       tmpNowFile = this.files[i];
+  //       break;
+  //     }
+  //   }
+  //   return tmpNowFile;
+  // }
+  // public get status(): TStatus {
+  //   return this._status;
+  // }
+  // public set status(new_status: TStatus) {
+  //   this._status = new_status;
+  //   this.statusHandle && this.statusHandle(this.id, new_status);
+  // }
+  // /**
+  //  * use @function getStatus() to get file's current status instead of accessing it directly
+  //  * so this is done to avoid errors during ts static checking
+  //  * @ref https://github.com/Microsoft/TypeScript/issues/29155
+  //  */
+  // public getStatus = (): TStatus => {
+  //   return this._status;
+  // };
+  // public update = (length: number) => {
+  //   if (this.status === 'inited') {
+  //     this.status = 'downloading';
+  //   }
 
-    let tmpEndTime: number = new Date().getTime();
-    let duration: number = tmpEndTime - this.startTime;
+  //   let tmpEndTime: number = new Date().getTime();
+  //   let duration: number = tmpEndTime - this.startTime;
 
-    // console.log('chunk ' + this.chunklist[this.nowChunkIndex - 1].start + '-' + this.chunklist[this.nowChunkIndex - 1].end + ' request complete at ' + tmpEndTime);
-    this.speed = (length / duration) * 1000;
-    this.remainSize -= length;
+  //   // console.log('chunk ' + this.chunklist[this.nowChunkIndex - 1].start + '-' + this.chunklist[this.nowChunkIndex - 1].end + ' request complete at ' + tmpEndTime);
+  //   this.speed = (length / duration) * 1000;
+  //   this.remainSize -= length;
 
-    this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize, this.status);
-  };
-  public nextChunk(): TChunk {
-    this.startTime = new Date().getTime();
-    // make sure next chunk is available when status not chunk_empty
-    if (!this.chunklist[this.nowChunkIndex + 1]) {
-      this.status = 'chunk_empty';
-    }
+  //   this.progressHandle && this.progressHandle(this.id, this.speed, this.remainSize, this.status);
+  // };
+  // public nextChunk(): TChunk {
+  //   this.startTime = new Date().getTime();
+  //   // make sure next chunk is available when status not chunk_empty
+  //   if (!this.chunklist[this.nowChunkIndex + 1]) {
+  //     this.status = 'chunk_empty';
+  //   }
 
-    // console.log('request chunk: ' + this.chunklist[this.nowChunkIndex].start + '-' + this.chunklist[this.nowChunkIndex].end + ' at ' + this.startTime);
-    return this.chunklist[this.nowChunkIndex++];
-  }
+  //   // console.log('request chunk: ' + this.chunklist[this.nowChunkIndex].start + '-' + this.chunklist[this.nowChunkIndex].end + ' at ' + this.startTime);
+  //   return this.chunklist[this.nowChunkIndex++];
+  // }
 
-  public resumePreChunk(): void {
-    if (this.status === 'chunk_empty') {
-      this.status = 'downloading';
-    }
+  // public resumePreChunk(): void {
+  //   if (this.status === 'chunk_empty') {
+  //     this.status = 'downloading';
+  //   }
 
-    this.nowChunkIndex -= 1;
-  }
+  //   this.nowChunkIndex -= 1;
+  // }
 }

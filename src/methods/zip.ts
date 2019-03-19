@@ -1,31 +1,15 @@
 import Crc32 from '../utils/crc32';
 import Int64 from '../utils/Int64';
 import SavvyFile from '../file';
-import SavvyZipFile from '../zip_file';
-type THeadAndFooter = { buffer: ArrayBuffer; array: Uint8Array; view: DataView };
+import Transfer from '../transfer';
 
-let appendABViewSupported: boolean = false;
-try {
-  appendABViewSupported = new Blob([new DataView(new ArrayBuffer(0))]).size === 0;
-} catch (e) {
-  console.log(e);
-}
-
-const CHUNK_SIZE = 512 * 1024;
 export class ZipWriter {
-  private writer: any;
-  private fileNames: string[] = [];
-  private files: any = {};
-  private dataLength: number = 0;
-
-  private offset: number = 0;
-
-  public async add(currentFile: SavvyFile, zipFile: SavvyZipFile, _buffer: ArrayBuffer, isLast: boolean): Promise<undefined> {
+  public async add(currentFile: SavvyFile, transfer: Transfer, _buffer: ArrayBuffer, isLast: boolean): Promise<undefined> {
     // part of the current file.
     let buffer: Uint8Array = new Uint8Array(_buffer);
 
     let crc: number = Crc32(buffer, currentFile.crc || 0, buffer.byteLength);
-    let ziper: ZIPClass = new ZIPClass(zipFile.fileSize);
+    let ziper: ZIPClass = new ZIPClass(transfer.fileSize);
 
     let fileName: string = unescape(encodeURIComponent(currentFile.name));
     currentFile.bufferAcc += buffer.byteLength;
@@ -33,7 +17,7 @@ export class ZipWriter {
 
     if (currentFile.offset === 0) {
       // begin set header
-      currentFile.headerPos = zipFile.offset;
+      currentFile.headerPos = transfer.offset;
       let ebuf: any = ezBuffer(1 + 4 + 4 + fileName.length);
       ebuf.i16(zipUtf8ExtraId);
       ebuf.i16(5 + fileName.length); // size
@@ -67,11 +51,11 @@ export class ZipWriter {
     }
 
     if (isLast) {
-      let end = ziper.ZipSuffix(buffer.byteLength + zipFile.offset, []);
+      let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []);
 
       // console.log('this file is the last to be added to this zip, add end.');
 
-      let dirData: any[] = zipFile.files.map(
+      let dirData: any[] = transfer.files.map(
         (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
       );
 
@@ -98,11 +82,11 @@ export class ZipWriter {
       buffer = tmpBuf;
     }
 
-    zipFile.offset += buffer.byteLength;
+    transfer.offset += buffer.byteLength;
 
     // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
     return new Promise((resolve: Function, reject: Function) => {
-      let tmpWrite: FileWriter = zipFile.fileWriter;
+      let tmpWrite: FileWriter = transfer.fileWriter;
       tmpWrite.onwriteend = (e: ProgressEvent) => {
         resolve();
       };
@@ -112,101 +96,6 @@ export class ZipWriter {
       tmpWrite.write(new Blob([buffer]));
     });
   }
-
-  /* private writeHeader(name: string, fileName: number[]): Promise<any> {
-    let data: { buffer: ArrayBuffer; array: Uint8Array; view: DataView };
-    let date: Date = new Date();
-    let header = getDataHelper(26);
-    this.files[name] = {
-      headerArray: header.array,
-      directory: false,
-      filename: fileName,
-      offset: this.dataLength,
-      comment: getBytes(encodeUTF8(''))
-    };
-    header.view.setUint32(0, 0x14000808);
-    header.view.setUint16(6, (((date.getHours() << 6) | date.getMinutes()) << 5) | (date.getSeconds() / 2), true);
-    header.view.setUint16(8, ((((date.getFullYear() - 1980) << 4) | (date.getMonth() + 1)) << 5) | date.getDate(), true);
-    header.view.setUint16(22, fileName.length, true);
-    data = getDataHelper(30 + fileName.length);
-    data.view.setUint32(0, 0x504b0304);
-    data.array.set(header.array, 4);
-    data.array.set(fileName, 30);
-    this.dataLength += data.array.length;
-
-    return new Promise((resolve: Function, reject: Function) => {
-      let tmpWrite: FileWriter = this.writer;
-      tmpWrite.onwriteend = (e: ProgressEvent) => {
-        resolve(header);
-      };
-      tmpWrite.onerror = () => {
-        reject();
-      };
-      tmpWrite.write(new Blob([appendABViewSupported ? data.array : data.array.buffer]));
-    });
-    // this.writer.writeUint8Array(data.array, callback, onwriteerror);
-  } 
-  private writeFooter(compressedLength: number, crc32: number, reader: BlobReader, header: THeadAndFooter): Promise<any> {
-    var footer: THeadAndFooter = getDataHelper(16);
-    this.dataLength += compressedLength || 0;
-    footer.view.setUint32(0, 0x504b0708);
-    if (typeof crc32 != 'undefined') {
-      header.view.setUint32(10, crc32, true);
-      footer.view.setUint32(4, crc32, true);
-    }
-    if (reader) {
-      footer.view.setUint32(8, compressedLength, true);
-      header.view.setUint32(14, compressedLength, true);
-      footer.view.setUint32(12, reader.size, true);
-      header.view.setUint32(18, reader.size, true);
-    }
-
-    return new Promise((resolve: Function, reject: Function) => {
-      let tmpWrite: FileWriter = this.writer;
-      tmpWrite.onwriteend = (e: ProgressEvent) => {
-        resolve();
-      };
-      tmpWrite.onerror = () => {
-        reject();
-      };
-      tmpWrite.write(new Blob([appendABViewSupported ? footer.array : footer.array.buffer]));
-    });
-  }
-
-  private async copy(reader: BlobReader, offset: number, size: number, computeCrc32: boolean): Promise<number> {
-    let chunkIndex = 0,
-      index,
-      outputSize = 0,
-      crcInput: boolean = true;
-    let crc = new Crc32();
-
-    // let outputData;
-    // index = chunkIndex * CHUNK_SIZE;
-    // if (index < size) {
-    //   let inputData = await reader.readUint8Array(offset + index, Math.min(CHUNK_SIZE, size - index));
-
-    //   if(inputData){
-    //     outputSize += inputData.length;
-    //     await this.writer.writeUint8Array()
-    //   }
-    // } else {
-    // }
-    // get all content once.
-    let inputData: Uint8Array = await reader.readUint8Array();
-    crc.append(inputData);
-    await new Promise((resolve: Function, reject: Function) => {
-      let tmpWrite: FileWriter = this.writer;
-      tmpWrite.onwriteend = (e: ProgressEvent) => {
-        resolve();
-      };
-      tmpWrite.onerror = () => {
-        reject();
-      };
-      tmpWrite.write(new Blob([appendABViewSupported ? inputData : inputData.buffer]));
-    });
-
-    return crc.get();
-  } */
 }
 export class BlobReader {
   private file: File;
@@ -435,7 +324,7 @@ function ezBuffer(size: number) {
       offset += text.length;
     },
     i64: function(number: number, bigendian?: boolean) {
-      var buffer = new Int64(number).buffer;
+      var buffer = new Int64(number, null).buffer;
       if (!bigendian) {
         // swap the by orders
         var nbuffer = new Uint8Array(buffer.length),
@@ -508,33 +397,4 @@ function DosDateTime(sec: number, buf: any) {
 
   buf.i16(dosTime);
   buf.i16(dosDate);
-}
-
-function blobSlice(blob: any, index: number, length: number) {
-  if (index < 0 || length < 0 || index + length > blob.size) throw new RangeError('offset:' + index + ', length:' + length + ', size:' + blob.size);
-  if (blob.slice) return blob.slice(index, index + length);
-  else if (blob.webkitSlice) return blob.webkitSlice(index, index + length);
-  else if (blob.mozSlice) return blob.mozSlice(index, index + length);
-  else if (blob.msSlice) return blob.msSlice(index, index + length);
-}
-function encodeUTF8(str: string) {
-  return unescape(encodeURIComponent(str));
-}
-function getBytes(str: string) {
-  var i,
-    array = [];
-  for (i = 0; i < str.length; i++) array.push(str.charCodeAt(i));
-  return array;
-}
-
-function getDataHelper(byteLength: number, bytes?: any): { buffer: ArrayBuffer; array: Uint8Array; view: DataView } {
-  var dataBuffer, dataArray;
-  dataBuffer = new ArrayBuffer(byteLength);
-  dataArray = new Uint8Array(dataBuffer);
-  if (bytes) dataArray.set(bytes, 0);
-  return {
-    buffer: dataBuffer,
-    array: dataArray,
-    view: new DataView(dataBuffer)
-  };
 }

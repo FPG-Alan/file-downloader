@@ -4,14 +4,13 @@ export type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'download
 export type TResumeData = {
   id: number;
   name: string;
-  type: 'zip';
+  type: 'zip' | 'normal';
   chunkIndex: number;
   tag: 0 | 1; // 0: not complete, 1: complete
 
   path?: string; // in case of the type is not zip, temporary not that possible
   size?: number; // in case of the type is not zip, temporary not that possibleoffset
   offset: number;
-  dirData: any[];
   files: TResumeFile[];
 };
 

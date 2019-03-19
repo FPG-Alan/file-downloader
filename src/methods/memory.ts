@@ -1,11 +1,12 @@
-import IO from './IO';
+import SavvyIO from './IO';
 import { filemime } from '../utils/index';
 import SavvyFile from '../file';
 import SavvyZipFile from '../zip_file';
 import { ZipWriter, createZipWriter } from './zip';
+import Transfer from '../transfer';
 
 const MSIE: boolean = typeof MSBlobBuilder === 'function';
-export default class MemoryIO extends IO {
+export default class MemoryIO extends SavvyIO {
   // private size: number;
   private downloadSize: number = 0;
 
@@ -14,49 +15,49 @@ export default class MemoryIO extends IO {
 
     console.log('memory download init...');
   }
-  public getFileWriter(file: SavvyFile | SavvyZipFile, successCallback: Function, errorCallback: Function): void {
+  public getFileWriter(transfer: Transfer, successCallback: Function, errorCallback: Function): void {
     successCallback({
       fileEntry: null,
       fileWriter: new MemoryWrite()
     });
   }
-  public write(file: SavvyFile | SavvyZipFile, buffer: ArrayBuffer): Promise<undefined> {
+  public write(transfer: Transfer, buffer: ArrayBuffer): Promise<undefined> {
     return new Promise((resolve: Function, reject: Function) => {
       console.log('memory write');
-      if (file.isZip) {
-        let tmpZipFile: SavvyZipFile = file as SavvyZipFile;
+      if (transfer.zip) {
+        // let tmpZipFile: SavvyZipFile = file as SavvyZipFile;
         let zipWriter: ZipWriter = createZipWriter();
-        let currentFile: SavvyFile = tmpZipFile.currentFile;
+        let currentFile: SavvyFile = transfer.currentFile;
 
-        zipWriter.add(currentFile, tmpZipFile, buffer, tmpZipFile.nowChunkIndex === tmpZipFile.chunklist.length).then(() => {
+        zipWriter.add(currentFile, transfer, buffer, transfer.chunkIndex === transfer.chunkList.length).then(() => {
           resolve();
         });
       } else {
-        file.fileWriter.onwriteend = () => {
+        transfer.fileWriter.onwriteend = () => {
           resolve();
         };
-        file.fileWriter.onerror = (e: Error) => {
+        transfer.fileWriter.onerror = (e: Error) => {
           reject();
         };
 
-        file.fileWriter.write(new Blob([buffer]));
+        transfer.fileWriter.write(new Blob([buffer]));
       }
     });
   }
-  public deleteFile(file: SavvyFile | SavvyZipFile): void {
-    file.fileWriter.clear();
-    file.fileWriter = null;
+  public deleteFile(transfer: Transfer): void {
+    transfer.fileWriter.clear();
+    transfer.fileWriter = null;
   }
-  public download(files: Array<SavvyFile | SavvyZipFile>): void {
-    for (let i: number = 0, l: number = files.length; i < l; i++) {
-      let blob: Blob = files[i].fileWriter.getBlob(files[i].name);
+  public download(transfers: Array<Transfer>): void {
+    for (let i: number = 0, l: number = transfers.length; i < l; i++) {
+      let blob: Blob = transfers[i].fileWriter.getBlob(transfers[i].name);
       let blob_url: string = '';
       if (MSIE) {
         navigator.msSaveOrOpenBlob(blob, name);
       } else {
         blob_url = window.URL.createObjectURL(blob);
         let dlLinkNode: HTMLAnchorElement = document.createElement('a');
-        dlLinkNode.download = files[i].name;
+        dlLinkNode.download = transfers[i].name;
         dlLinkNode.href = blob_url;
 
         console.log(dlLinkNode);
