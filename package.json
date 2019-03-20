@@ -4,6 +4,7 @@
   "description": "browsers-compatible file system",
   "main": "dist/savvy-transfer.js",
   "module": "dist/savvy-transfe.esm.js",
+  "types": "index.d.ts",
   "scripts": {
     "cz": "git-cz",
     "clean": "rimraf dist",
