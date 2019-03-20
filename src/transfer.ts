@@ -1,6 +1,6 @@
 import SavvyFile from './file';
 import FilesystemIO from './methods/filesystem';
-import MemoryIO from './methods/memory';
+import MemoryIO, { MemoryWrite } from './methods/memory';
 import { TStatus, TChunk } from './interface';
 import TransferProcesser from './processer';
 import { filetype } from './utils';
@@ -21,7 +21,7 @@ export default class Transfer {
   public fileSize: number; //include
   public remainSize: number;
 
-  public fileWriter: any;
+  public fileWriter: FileWriter | MemoryWrite | null = null;
   public fileEntry: any;
   public progressHandle: Function;
   public statusUpdateHandle: Function;
@@ -53,7 +53,7 @@ export default class Transfer {
     this.zip = zip;
 
     // set file size
-    // -----------------------------------------------------------------\
+    // -----------------------------------------------------------------
     this.totalSize = files.reduce((prev: number, cur: SavvyFile) => prev + cur.fileSize, 0);
     this.fileSize = 0;
     if (zip) {

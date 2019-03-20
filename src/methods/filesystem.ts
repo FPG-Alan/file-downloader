@@ -1,7 +1,6 @@
 import SavvyIO from './IO';
 import { filemime } from '../utils/index';
-import SavvyFile from '../file';
-import { createZipWriter, ZipWriter } from './zip';
+import { zipBuffer } from './zip';
 import Transfer from '../transfer';
 
 const customWindow: any = window;
@@ -16,7 +15,6 @@ export default class FilesystemIO extends SavvyIO {
   constructor() {
     super();
     customWindow.requestFileSystem = customWindow.requestFileSystem || customWindow.webkitRequestFileSystem;
-    // 创建文件系统, 临时空间会被浏览器自行判断, 在需要时删除, 永久空间不会, 但申请时需要用户允许.
     // window.requestFileSystem(type, size, successCallback[, errorCallback]);
     customWindow.requestFileSystem(TEMPORARY, 0x10000, (fs: FileSystem) => {
       // free space....
@@ -31,11 +29,6 @@ export default class FilesystemIO extends SavvyIO {
           if (this.freeSpaceRequest) {
             this.freeSpace(this.allResumeFiles);
           }
-          /* entries.map((entry: Entry) => {
-            entry.remove(() => {
-              console.log('remove file [' + entry.name + '] from filesystem successful.');
-            });
-          }); */
         });
       });
     });
@@ -81,7 +74,7 @@ export default class FilesystemIO extends SavvyIO {
     });
   }
   /**
-   * @param {SavvyFile} file
+   * @param {Transfer} transfer
    * @param {Function} successCallback
    * @param {Function} errorCallback
    */
@@ -147,7 +140,7 @@ export default class FilesystemIO extends SavvyIO {
     }
   }
   /**
-   * @param {SavvyFile} file
+   * @param {Transfer} transfer
    * @param {ArrayBuffer} buffer
    */
   public write(transfer: Transfer, buffer: ArrayBuffer): Promise<any> {
@@ -155,10 +148,17 @@ export default class FilesystemIO extends SavvyIO {
       if (transfer.fileWriter) {
         let fileWriter: FileWriter = transfer.fileWriter as FileWriter;
         if (transfer.zip) {
-          let zipWriter: ZipWriter = createZipWriter();
-          let currentFile: SavvyFile = transfer.currentFile;
-          zipWriter.add(currentFile, transfer, buffer, transfer.chunkIndex === transfer.chunkList.length).then(() => {
-            resolve();
+          // get processed data from zip writer
+          zipBuffer(transfer.currentFile, transfer, buffer, transfer.chunkIndex === transfer.chunkList.length).then((zipBuffer: ArrayBuffer) => {
+            try {
+              fileWriter.onwriteend = (e: ProgressEvent) => {
+                resolve();
+              };
+              fileWriter.write(new Blob([zipBuffer]));
+            } catch (e) {
+              console.log(e);
+              reject();
+            }
           });
         } else {
           try {

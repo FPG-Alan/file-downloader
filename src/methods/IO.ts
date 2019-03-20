@@ -1,3 +1,1 @@
-export default class SavvyIO {
-  // public download() {}
-}
+export default class SavvyIO {}

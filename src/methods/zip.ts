@@ -3,130 +3,94 @@ import Int64 from '../utils/Int64';
 import SavvyFile from '../file';
 import Transfer from '../transfer';
 
-export class ZipWriter {
-  public async add(currentFile: SavvyFile, transfer: Transfer, _buffer: ArrayBuffer, isLast: boolean): Promise<undefined> {
-    // part of the current file.
-    let buffer: Uint8Array = new Uint8Array(_buffer);
+/**
+ * get a ziped buffer of origin buffer from http request
+ * @param {SavvyFile} currentFile file which being downloaded
+ * @param {Transfer} transfer transfer which being ziped (might has multiply files)
+ * @param {ArrayBuffer} _buffer buffer which need be processed
+ * @param {boolean} isLast indicates if this buffer is the last chunk of the last file belong to current transfer
+ *
+ * @returns {Promise<ArrayBuffer>}
+ */
+export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buffer: ArrayBuffer, isLast: boolean): Promise<ArrayBuffer> {
+  // part of the current file.
+  let buffer: Uint8Array = new Uint8Array(_buffer);
 
-    let crc: number = Crc32(buffer, currentFile.crc || 0, buffer.byteLength);
-    let ziper: ZIPClass = new ZIPClass(transfer.fileSize);
+  let crc: number = Crc32(buffer, currentFile.crc || 0, buffer.byteLength);
+  let ziper: ZIPClass = new ZIPClass(transfer.fileSize);
 
-    let fileName: string = unescape(encodeURIComponent(currentFile.name));
-    currentFile.bufferAcc += buffer.byteLength;
-    currentFile.crc = crc;
+  let fileName: string = unescape(encodeURIComponent(currentFile.name));
+  currentFile.bufferAcc += buffer.byteLength;
+  currentFile.crc = crc;
 
-    if (currentFile.offset === 0) {
-      // begin set header
-      currentFile.headerPos = transfer.offset;
-      let ebuf: any = ezBuffer(1 + 4 + 4 + fileName.length);
-      ebuf.i16(zipUtf8ExtraId);
-      ebuf.i16(5 + fileName.length); // size
-      ebuf.i8(1); // version
-      ebuf.i32(Crc32(fileName));
-      ebuf.appendBytes(fileName);
+  if (currentFile.offset === 0) {
+    // begin set header
+    currentFile.headerPos = transfer.offset;
+    let ebuf: any = ezBuffer(1 + 4 + 4 + fileName.length);
+    ebuf.i16(zipUtf8ExtraId);
+    ebuf.i16(5 + fileName.length); // size
+    ebuf.i8(1); // version
+    ebuf.i32(Crc32(fileName));
+    ebuf.appendBytes(fileName);
 
-      let header: Uint8Array = ziper.ZipHeader(fileName, currentFile.fileSize /* TO-DO: add file date */, ebuf.getArray());
+    let header: Uint8Array = ziper.ZipHeader(fileName, currentFile.fileSize /* TO-DO: add file date */, ebuf.getArray());
 
-      let d = new Uint8Array(header.byteLength + buffer.byteLength);
-      d.set(header, 0);
-      d.set(buffer, header.byteLength);
+    let d = new Uint8Array(header.byteLength + buffer.byteLength);
+    d.set(header, 0);
+    d.set(buffer, header.byteLength);
 
-      buffer = d;
-      // console.log('add header');
-    }
-
-    // begin set central directory
-    if (currentFile.bufferAcc === currentFile.fileSize) {
-      let centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
-      // zipFile.dirData.push(centralDir.dirRecord);
-      let centralDirBuffer: Uint8Array = centralDir.dataDescriptor;
-
-      let d = new Uint8Array(buffer.byteLength + centralDirBuffer.byteLength);
-      d.set(buffer, 0);
-      d.set(centralDirBuffer, buffer.byteLength);
-
-      buffer = d;
-    } else {
-      currentFile.offset += buffer.byteLength;
-    }
-
-    if (isLast) {
-      let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []);
-
-      // console.log('this file is the last to be added to this zip, add end.');
-
-      let dirData: any[] = transfer.files.map(
-        (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
-      );
-
-      let tmpSize: number = 0,
-        tmpOffset: number = buffer.byteLength,
-        tmpBuf: Uint8Array;
-
-      for (let i in dirData) {
-        tmpSize += dirData[i].byteLength;
-      }
-
-      tmpBuf = new Uint8Array(buffer.byteLength + tmpSize + end.byteLength);
-
-      tmpBuf.set(buffer, 0);
-
-      for (let i in dirData) {
-        // console.log(this.dirData[i], tmpOffset);
-        tmpBuf.set(dirData[i], tmpOffset);
-        tmpOffset += dirData[i].byteLength;
-      }
-
-      tmpBuf.set(end, tmpOffset);
-
-      buffer = tmpBuf;
-    }
-
-    transfer.offset += buffer.byteLength;
-
-    // console.log('get a finalliy buffer, length: ' + buffer.byteLength);
-    return new Promise((resolve: Function, reject: Function) => {
-      let tmpWrite: FileWriter = transfer.fileWriter;
-      tmpWrite.onwriteend = (e: ProgressEvent) => {
-        resolve();
-      };
-      tmpWrite.onerror = () => {
-        reject();
-      };
-      tmpWrite.write(new Blob([buffer]));
-    });
-  }
-}
-export class BlobReader {
-  private file: File;
-  public size: number;
-  constructor(_file: File) {
-    this.file = _file;
-    this.size = _file.size;
+    buffer = d;
+    // console.log('add header');
   }
 
-  public readUint8Array(): Promise<Uint8Array> {
-    return new Promise((resolve: Function, reject: Function) => {
-      let reader: FileReader = new FileReader();
-      // TO-DO: may be wrong
-      reader.onload = (e: any): void => {
-        resolve(new Uint8Array(reader.result as ArrayBuffer));
-      };
+  // begin set central directory
+  if (currentFile.bufferAcc === currentFile.fileSize) {
+    let centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
+    // zipFile.dirData.push(centralDir.dirRecord);
+    let centralDirBuffer: Uint8Array = centralDir.dataDescriptor;
 
-      reader.onerror = (): void => {
-        reject();
-      };
+    let d = new Uint8Array(buffer.byteLength + centralDirBuffer.byteLength);
+    d.set(buffer, 0);
+    d.set(centralDirBuffer, buffer.byteLength);
 
-      try {
-        reader.readAsArrayBuffer(this.file);
-      } catch (e) {
-        reject();
-      }
-    });
+    buffer = d;
+  } else {
+    currentFile.offset += buffer.byteLength;
   }
-}
-export function createZipWriter(): ZipWriter {
-  return new ZipWriter();
+
+  if (isLast) {
+    let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []);
+    let dirData: any[] = transfer.files.map(
+      (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
+    );
+
+    let tmpSize: number = 0,
+      tmpOffset: number = buffer.byteLength,
+      tmpBuf: Uint8Array;
+
+    for (let i in dirData) {
+      tmpSize += dirData[i].byteLength;
+    }
+
+    tmpBuf = new Uint8Array(buffer.byteLength + tmpSize + end.byteLength);
+
+    tmpBuf.set(buffer, 0);
+
+    for (let i in dirData) {
+      tmpBuf.set(dirData[i], tmpOffset);
+      tmpOffset += dirData[i].byteLength;
+    }
+
+    tmpBuf.set(end, tmpOffset);
+
+    buffer = tmpBuf;
+  }
+
+  transfer.offset += buffer.byteLength;
+
+  return new Promise((resolve: Function, reject: Function) => {
+    resolve(buffer);
+  });
 }
 
 const fileHeaderLen: number = 30;
