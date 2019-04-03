@@ -1503,7 +1503,7 @@ function _zipBuffer() {
   _zipBuffer = asyncToGenerator(
   /*#__PURE__*/
   regenerator.mark(function _callee(currentFile, transfer, _buffer, isLast) {
-    var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, end, dirData, tmpSize, tmpOffset, tmpBuf, i, _i;
+    var buffer, crc, ziper, fileName, ebuf, header, d, centralDir, centralDirBuffer, _d, dirRecord, end, dirData, tmpSize, tmpOffset, tmpBuf, i, _i;
 
     return regenerator.wrap(function _callee$(_context) {
       while (1) {
@@ -1554,7 +1554,11 @@ function _zipBuffer() {
             }
 
             if (isLast) {
-              end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []);
+              dirRecord = transfer.files.map(function (file) {
+                var tmpCentralDir = ziper.ZipCentralDirectory(file.name, file.fileSize, file.fileSize, file.crc, false, file.headerPos);
+                return tmpCentralDir.dirRecord;
+              });
+              end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, dirRecord);
               dirData = transfer.files.map(function (file) {
                 return ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord;
               });
@@ -1572,6 +1576,7 @@ function _zipBuffer() {
                 tmpOffset += dirData[_i].byteLength;
               }
 
+              console.log(end);
               tmpBuf.set(end, tmpOffset);
               buffer = tmpBuf;
             }
@@ -2353,7 +2358,7 @@ function () {
   return MemoryWrite;
 }();
 
-var SavvyFile = function SavvyFile(path, name, fileSize, chunkSize, buffacc, offset) {
+var SavvyFile = function SavvyFile(path, name, fileSize, chunkSize, buffacc, offset, crc) {
   classCallCheck(this, SavvyFile);
 
   this.chunkList = [];
@@ -2369,6 +2374,7 @@ var SavvyFile = function SavvyFile(path, name, fileSize, chunkSize, buffacc, off
   this.fileSize = fileSize;
   this.bufferAcc = buffacc || 0;
   this.offset = offset || 0;
+  this.crc = crc || 0;
   var tmpStart = 0,
       tmpEnd = 0;
 
@@ -2891,7 +2897,7 @@ function () {
 
           (_this$transfers = this.transfers).push.apply(_this$transfers, toConsumableArray(resumeData.map(function (data) {
             return new Transfer(data.files.map(function (_file) {
-              return new SavvyFile(_file.path, _file.name, _file.size, _this2.CHUNK_SIZE, _file.bufferAcc, _file.offset);
+              return new SavvyFile(_file.path, _file.name, _file.size, _this2.CHUNK_SIZE, _file.bufferAcc, _file.offset, _file.crc);
             }), data.name, _this2.IO, _this2.progressHandle, _this2.statusUpdateHandle, true, data.chunkIndex, data.id, data.offset, true);
           })));
         } catch (e) {
@@ -2931,7 +2937,8 @@ function () {
             path: _file.filePath,
             size: _file.fileSize,
             bufferAcc: _file.bufferAcc,
-            offset: _file.offset
+            offset: _file.offset,
+            crc: _file.crc
           };
         })
       };

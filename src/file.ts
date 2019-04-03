@@ -12,13 +12,14 @@ export default class SavvyFile {
   public headerPos: number = 0;
   public bufferAcc: number = 0;
 
-  constructor(path: string, name: string, fileSize: number, chunkSize: number, buffacc?: number, offset?: number) {
+  constructor(path: string, name: string, fileSize: number, chunkSize: number, buffacc?: number, offset?: number, crc?: number) {
     this.filePath = path;
     this.name = name;
     this.fileSize = fileSize;
 
     this.bufferAcc = buffacc || 0;
     this.offset = offset || 0;
+    this.crc = crc || 0;
 
     let tmpStart: number = 0,
       tmpEnd: number = 0;

@@ -59,7 +59,12 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
   }
 
   if (isLast) {
-    let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, []);
+    let dirRecord = transfer.files.map((file: SavvyFile) => {
+      let tmpCentralDir = ziper.ZipCentralDirectory(file.name, file.fileSize, file.fileSize, file.crc, false, file.headerPos);
+
+      return tmpCentralDir.dirRecord;
+    });
+    let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, dirRecord);
     let dirData: any[] = transfer.files.map(
       (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
     );
@@ -81,6 +86,7 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
       tmpOffset += dirData[i].byteLength;
     }
 
+    console.log(end);
     tmpBuf.set(end, tmpOffset);
 
     buffer = tmpBuf;

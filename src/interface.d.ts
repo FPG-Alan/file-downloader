@@ -10,6 +10,7 @@ export type TResumeData = {
 
   path?: string; // in case of the type is not zip, temporary not that possible
   size?: number; // in case of the type is not zip, temporary not that possibleoffset
+  crc?: number;
   offset: number;
   files: TResumeFile[];
 };

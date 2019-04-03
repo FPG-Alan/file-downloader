@@ -58,7 +58,7 @@ export default class SavvyTransfer {
         this.transfers.push(
           ...resumeData.map((data: TResumeData) => {
             return new Transfer(
-              data.files.map((_file: TResumeFile) => new SavvyFile(_file.path, _file.name, _file.size, this.CHUNK_SIZE, _file.bufferAcc, _file.offset)),
+              data.files.map((_file: TResumeFile) => new SavvyFile(_file.path, _file.name, _file.size, this.CHUNK_SIZE, _file.bufferAcc, _file.offset, _file.crc)),
               data.name,
               this.IO,
               this.progressHandle,
@@ -105,7 +105,8 @@ export default class SavvyTransfer {
         size: _file.fileSize,
 
         bufferAcc: _file.bufferAcc,
-        offset: _file.offset
+        offset: _file.offset,
+        crc: _file.crc
       }))
     };
     let rawResumeData: string | null = window.localStorage.getItem('savvy_transfers');
