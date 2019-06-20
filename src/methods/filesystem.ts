@@ -23,7 +23,7 @@ export default class FilesystemIO extends SavvyIO {
 
         dirReader.readEntries((entries: Entry[]) => {
           // TO-DO: can not just simply clear all old files, need to keep files which are not completely downloaded.
-          console.log(entries);
+          // console.log(entries);
           this.allEntries = entries;
           this.entrtiesReaded = true;
           if (this.freeSpaceRequest) {

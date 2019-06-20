@@ -153,7 +153,7 @@ export default class SavvyTransfer {
     }
   }
   // temporary just on type - zip
-  public async addFiles(files: { path: string; name: string }[], asZip: boolean = false): Promise<Transfer | Array<Transfer>> {
+  public async addFiles(files: { path: string; name: string }[], asZip: boolean = false, zipName: string): Promise<Transfer | Array<Transfer>> {
     let tmpFiles: SavvyFile[] = [];
     for (let i: number = 0, l: number = files.length; i < l; i++) {
       try {
@@ -169,7 +169,7 @@ export default class SavvyTransfer {
     let tmpTransfer: Transfer;
     if (asZip) {
       // create a zip file
-      tmpTransfer = new Transfer(tmpFiles, `Archive-${generateId(4)}.zip`, this.IO, this.progressHandle, this.statusUpdateHandle, true);
+      tmpTransfer = new Transfer(tmpFiles, zipName, this.IO, this.progressHandle, this.statusUpdateHandle, true);
       this.transfers.push(tmpTransfer);
 
       // store in locastorage for resume
