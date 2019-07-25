@@ -1,5 +1,5 @@
 export type TChunk = { filePath: string; start: number; end: number };
-export type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'downloading' | 'chunk_empty' | 'complete' | 'abort';
+export type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'downloading' | 'chunk_empty' | 'complete' | 'abort' | 'error';
 
 export type TResumeData = {
   id: number;
@@ -21,4 +21,5 @@ export type TResumeFile = {
   size: number;
   bufferAcc: number;
   offset: number;
+  crc: number;
 };

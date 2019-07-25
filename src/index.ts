@@ -11,7 +11,7 @@ const IS64BIT: boolean = /\b(WOW64|x86_64|Win64|intel mac os x 10.(9|\d{2,}))/i.
 const DEV: boolean = false;
 export default class SavvyTransfer {
   private SIZE_LIMIT: number = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
-  private CHUNK_SIZE: number = 1024 * 1024 * 10;
+  private CHUNK_SIZE: number = 1024 * 1024 * 1;
   private HTTP_NUM: number = 5;
 
   public totalSize: number = 0;

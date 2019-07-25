@@ -2592,13 +2592,12 @@ function () {
       var _ref = asyncToGenerator(
       /*#__PURE__*/
       regenerator.mark(function _callee(transfer, scheduler) {
-        var nextChunk, response, buffer;
         return regenerator.wrap(function _callee$(_context) {
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
                 if (transfer.paused) {
-                  _context.next = 65;
+                  _context.next = 31;
                   break;
                 }
 
@@ -2656,91 +2655,22 @@ function () {
 
               case 27:
                 // file.status should be inited
-                nextChunk = transfer.nextChunk();
-                _context.next = 30;
-                return fetch(nextChunk.filePath, {
-                  method: 'GET',
-                  headers: {
-                    Range: "bytes=".concat(nextChunk.start, "-").concat(nextChunk.end)
+                _this.fetchChunk(transfer, scheduler).catch(function (error) {
+                  console.log(error);
+                  transfer.resumePreChunk();
+                  transfer.paused = true;
+                  transfer.lock = false;
+                  transfer.processer = null;
+                  _this.idle = true;
+
+                  if (transfer.status !== 'abort') {
+                    transfer.status = 'error';
                   }
                 });
 
-              case 30:
-                response = _context.sent;
-
-                if (!transfer.paused) {
-                  _context.next = 38;
-                  break;
-                }
-
-                // throw this chunk
-                transfer.resumePreChunk();
-                transfer.lock = false;
-                transfer.processer = null;
-                _this.idle = true;
-
-                if (transfer.status !== 'abort') {
-                  transfer.status = 'paused';
-                }
-
                 return _context.abrupt("return");
 
-              case 38:
-                _context.next = 40;
-                return response.arrayBuffer();
-
-              case 40:
-                buffer = _context.sent;
-
-                if (!transfer.paused) {
-                  _context.next = 49;
-                  break;
-                }
-
-                // throw this chunk
-                transfer.resumePreChunk();
-                transfer.paused = true;
-                transfer.lock = false;
-                transfer.processer = null;
-                _this.idle = true;
-
-                if (transfer.status !== 'abort') {
-                  transfer.status = 'paused';
-                }
-
-                return _context.abrupt("return");
-
-              case 49:
-                _context.next = 51;
-                return scheduler.IO.write(transfer, buffer);
-
-              case 51:
-                if (!(transfer.getStatus() === 'abort')) {
-                  _context.next = 59;
-                  break;
-                }
-
-                // delete this file.
-                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_transfer) {
-                  return _transfer.id === _transfer.id;
-                }), 1);
-                _this.idle = true;
-                _this.transfer = null;
-                transfer.lock = false;
-                transfer.processer = null;
-                scheduler.distributeToProcessers();
-                return _context.abrupt("return");
-
-              case 59:
-                transfer.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
-
-                scheduler.storeFileForResume(transfer);
-
-                _this.run(transfer, scheduler);
-
-                return _context.abrupt("return");
-
-              case 65:
+              case 31:
                 if (transfer.status !== 'abort') {
                   transfer.status = 'paused';
                 }
@@ -2749,7 +2679,7 @@ function () {
                 transfer.lock = false;
                 _this.idle = true;
 
-              case 69:
+              case 35:
               case "end":
                 return _context.stop();
             }
@@ -2793,6 +2723,109 @@ function () {
         }
       }
     }
+  }, {
+    key: "fetchChunk",
+    value: function () {
+      var _fetchChunk = asyncToGenerator(
+      /*#__PURE__*/
+      regenerator.mark(function _callee2(transfer, scheduler) {
+        var nextChunk, response, buffer;
+        return regenerator.wrap(function _callee2$(_context2) {
+          while (1) {
+            switch (_context2.prev = _context2.next) {
+              case 0:
+                nextChunk = transfer.nextChunk();
+                _context2.next = 3;
+                return fetch(nextChunk.filePath, {
+                  method: 'GET',
+                  headers: {
+                    Range: "bytes=".concat(nextChunk.start, "-").concat(nextChunk.end)
+                  }
+                });
+
+              case 3:
+                response = _context2.sent;
+
+                if (!transfer.paused) {
+                  _context2.next = 7;
+                  break;
+                }
+
+                // throw this chunk
+                this.pausedDuringFetch(transfer);
+                return _context2.abrupt("return");
+
+              case 7:
+                _context2.next = 9;
+                return response.arrayBuffer();
+
+              case 9:
+                buffer = _context2.sent;
+
+                if (!transfer.paused) {
+                  _context2.next = 13;
+                  break;
+                }
+
+                // throw this chunk
+                this.pausedDuringFetch(transfer);
+                return _context2.abrupt("return");
+
+              case 13:
+                _context2.next = 15;
+                return scheduler.IO.write(transfer, buffer);
+
+              case 15:
+                if (!(transfer.getStatus() === 'abort')) {
+                  _context2.next = 23;
+                  break;
+                }
+
+                // delete this file.
+                scheduler.schedulingFiles.splice(scheduler.schedulingFiles.findIndex(function (_transfer) {
+                  return _transfer.id === _transfer.id;
+                }), 1);
+                this.idle = true;
+                this.transfer = null;
+                transfer.lock = false;
+                transfer.processer = null;
+                scheduler.distributeToProcessers();
+                return _context2.abrupt("return");
+
+              case 23:
+                transfer.update(nextChunk.end - (nextChunk.start === 0 ? 0 : nextChunk.start - 1)); // console.log(file.name + ' write ' + (file.nowChunkIndex - 1) + ' chunk, scope: ' + nextChunk.start + '-' + nextChunk.end);
+
+                scheduler.storeFileForResume(transfer);
+                this.run(transfer, scheduler);
+                return _context2.abrupt("return");
+
+              case 27:
+              case "end":
+                return _context2.stop();
+            }
+          }
+        }, _callee2, this);
+      }));
+
+      function fetchChunk(_x3, _x4) {
+        return _fetchChunk.apply(this, arguments);
+      }
+
+      return fetchChunk;
+    }()
+  }, {
+    key: "pausedDuringFetch",
+    value: function pausedDuringFetch(transfer) {
+      transfer.resumePreChunk();
+      transfer.paused = true;
+      transfer.lock = false;
+      transfer.processer = null;
+      this.idle = true;
+
+      if (transfer.status !== 'abort') {
+        transfer.status = 'paused';
+      }
+    }
   }]);
 
   return TransferProcesser;
@@ -2810,7 +2843,7 @@ function () {
     classCallCheck(this, SavvyTransfer);
 
     this.SIZE_LIMIT = 1024 * 1024 * 1024 * (1 + (IS64BIT ? 1 : 0));
-    this.CHUNK_SIZE = 1024 * 1024 * 10;
+    this.CHUNK_SIZE = 1024 * 1024 * 1;
     this.HTTP_NUM = 5;
     this.totalSize = 0;
     this.IO = void 0;
