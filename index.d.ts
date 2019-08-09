@@ -2,9 +2,7 @@
 // Project: Savvy-Transfer
 // Definitions by: Alan.Yang <http://fpg-alan.github.io>
 
-export = SavvyTransfer;
-
-declare class SavvyTransfer {
+export declare class SavvyTransfer {
   constructor(onProgress: Function, onStatusUpdate: Function);
   public totalSize: number;
   public IO: FilesystemIO | MemoryIO;
@@ -21,7 +19,7 @@ declare class SavvyTransfer {
   retrieveFilesFromLocalStorage(): Array<Transfer>;
   storeFileForResume(transferForUpdate: Transfer): void;
   deleteFileFromStore(): Array<Transfer>;
-  addFiles(files: { path: string; name: string }[], asZip: boolean): Promise<Transfer | Array<Transfer>>;
+  addFiles(files: { path: string; name: string }[], asZip: boolean, fileName: string): Promise<Transfer | Array<Transfer>>;
   removeFile(transfer: Transfer): Transfer | undefined;
   pause(transfers: Array<Transfer>): boolean;
   resume(transfers: Array<Transfer>): void;
@@ -29,7 +27,7 @@ declare class SavvyTransfer {
   distributeToProcessers(): void;
 }
 
-declare class SavvyFile {
+export declare class SavvyFile {
   public chunkList: TChunk[];
 
   public filePath: string;
@@ -43,7 +41,7 @@ declare class SavvyFile {
   constructor(path: string, name: string, fileSize: number, chunkSize: number, buffacc?: number, offset?: number);
 }
 
-declare class Transfer {
+export declare class Transfer {
   public files: SavvyFile[];
   public name: string;
   public fileType: string;
@@ -93,14 +91,14 @@ declare class Transfer {
   resumePreChunk(): void;
 }
 
-declare class TransferProcesser {
+export declare class TransferProcesser {
   public idle: boolean;
   public transfer: Transfer | null;
 
   run(transfer: Transfer, scheduler: SavvyTransfer): void;
 }
 
-declare class FilesystemIO {
+export declare class FilesystemIO {
   removeFile(transfer: Transfer): Promise<undefined>;
   removeAll(): void;
   getFileWriter(transfer: Transfer, successCallback: Function, errorCallback: Function): void;
@@ -109,13 +107,13 @@ declare class FilesystemIO {
   download(transfers: Array<Transfer>): void;
 }
 
-declare class MemoryIO {
+export declare class MemoryIO {
   getFileWriter(transfer: Transfer, successCallback: Function, errorCallback: Function): void;
   write(transfer: Transfer, buffer: ArrayBuffer): Promise<undefined>;
   deleteFile(transfer: Transfer): void;
   download(transfers: Array<Transfer>): void;
 }
-declare class MemoryWrite {
+export declare class MemoryWrite {
   private blobList: MSBlobBuilder | Blob[];
   public onwriteend: Function | null;
   public onerror: Function | null;
@@ -126,6 +124,8 @@ declare class MemoryWrite {
   write(buffer: Blob): void;
   clear(): void;
 }
+
+export default SavvyTransfer;
 
 type TChunk = { filePath: string; start: number; end: number };
 type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'downloading' | 'chunk_empty' | 'complete' | 'abort';
