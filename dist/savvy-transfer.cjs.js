@@ -1,6 +1,6 @@
 /*!
  * savvy-transfer.js v1.0.0
- * (c) 2018-2019 FPG
+ * (c) 2018-2020 FPG
  * Released under the MIT License.
  */
 'use strict';
@@ -3143,9 +3143,12 @@ function () {
 
               case 5:
                 response = _context2.sent;
+                console.log(response.headers.forEach(function (value, key) {
+                  return console.log("".concat(key, ": ").concat(value));
+                }));
 
-                if (response.headers.get('content-range')) {
-                  _context2.next = 9;
+                if (response.headers.get('content-length')) {
+                  _context2.next = 10;
                   break;
                 }
 
@@ -3153,12 +3156,13 @@ function () {
 
                 throw new Error('Can not get file size, check file path or contact service provider.');
 
-              case 9:
+              case 10:
                 // calculate whether the size limit is exceeded
-                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
+                fileSize = parseInt(response.headers.get('content-length'));
+                console.log(fileSize);
 
                 if (!(fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT)) {
-                  _context2.next = 13;
+                  _context2.next = 15;
                   break;
                 }
 
@@ -3166,7 +3170,7 @@ function () {
 
                 throw new Error('exceed');
 
-              case 13:
+              case 15:
                 // create new file
                 tmpFile = new SavvyFile(path, name, fileSize, this.CHUNK_SIZE); // ensure each file get it's writer from IO
                 // `asZip` flag indicate this SavvyFile where belong another SavvyFile which will actually being download as a zip file
@@ -3177,15 +3181,15 @@ function () {
                 } */
 
                 this.totalSize += tmpFile.fileSize;
-                _context2.next = 17;
+                _context2.next = 19;
                 return new Promise(function (resolve, reject) {
                   setTimeout(resolve, 1);
                 });
 
-              case 17:
+              case 19:
                 return _context2.abrupt("return", tmpFile);
 
-              case 18:
+              case 20:
               case "end":
                 return _context2.stop();
             }
