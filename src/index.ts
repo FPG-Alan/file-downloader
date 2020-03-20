@@ -190,14 +190,14 @@ export default class SavvyTransfer {
     // get file size
     let response: Response = await fetch(path, { method: 'GET', headers: { Range: 'bytes=0-1' } });
     console.log(response.headers.forEach((value, key) => console.log(`${key}: ${value}`)));
-    if (!response.headers.get('content-length')) {
+    if (!response.headers.get('content-range')) {
       console.log('can not get file size, check file path or contact service provider.');
       // let message = 'can not get file size, check file path or contact service provider.';
       throw new Error('Can not get file size, check file path or contact service provider.');
       // return;
     }
     // calculate whether the size limit is exceeded
-    let fileSize: number = parseInt(response.headers.get('content-length')!);
+    let fileSize: number = parseInt(response.headers.get('content-range')!);
     console.log(fileSize);
     if (fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT) {
       console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');

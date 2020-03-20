@@ -3147,7 +3147,7 @@ function () {
                   return console.log("".concat(key, ": ").concat(value));
                 }));
 
-                if (response.headers.get('content-length')) {
+                if (response.headers.get('content-range')) {
                   _context2.next = 10;
                   break;
                 }
@@ -3158,7 +3158,7 @@ function () {
 
               case 10:
                 // calculate whether the size limit is exceeded
-                fileSize = parseInt(response.headers.get('content-length'));
+                fileSize = parseInt(response.headers.get('content-range'));
                 console.log(fileSize);
 
                 if (!(fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT)) {
