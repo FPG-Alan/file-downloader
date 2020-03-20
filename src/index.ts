@@ -197,7 +197,7 @@ export default class SavvyTransfer {
       // return;
     }
     // calculate whether the size limit is exceeded
-    let fileSize: number = parseInt(response.headers.get('content-range')!);
+    let fileSize: number = parseInt(response.headers.get('content-range')!.split('/')[1]);
     console.log(fileSize);
     if (fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT) {
       console.log('The download size exceeds the maximum size supported by the browser. You can use savvy-cli to proceed with the download.');

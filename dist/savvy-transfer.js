@@ -3162,7 +3162,7 @@
 
 	              case 10:
 	                // calculate whether the size limit is exceeded
-	                fileSize = parseInt(response.headers.get('content-range'));
+	                fileSize = parseInt(response.headers.get('content-range').split('/')[1]);
 	                console.log(fileSize);
 
 	                if (!(fileSize > this.SIZE_LIMIT || fileSize + this.totalSize > this.SIZE_LIMIT)) {
