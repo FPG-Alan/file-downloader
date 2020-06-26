@@ -128,7 +128,7 @@ export declare class MemoryWrite {
 export default SavvyTransfer;
 
 type TChunk = { filePath: string; start: number; end: number };
-type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'downloading' | 'chunk_empty' | 'complete' | 'abort';
+type TStatus = 'initializing' | 'inited' | 'queue' | 'paused' | 'downloading' | 'chunk_empty' | 'complete' | 'abort' | 'error';
 
 type TResumeData = {
   id: number;
