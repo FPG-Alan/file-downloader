@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "description": "browsers-compatible file system",
   "main": "dist/savvy-transfer.js",
-  "module": "dist/savvy-transfe.esm.js",
+  "module": "dist/savvy-transfer.esm.js",
   "types": "index.d.ts",
   "scripts": {
     "cz": "git-cz",
     "clean": "rimraf dist",
     "start": "cross-env NODE_ENV=development rollup -w -c scripts/rollup.config.dev.js",
-    "build": "yarn run clean && cross-env NODE_ENV=production rollup -c scripts/rollup.config.prod.js",
+    "build": "npm run clean && cross-env NODE_ENV=production rollup -c scripts/rollup.config.prod.js",
     "release": "standard-version"
   },
   "repository": {

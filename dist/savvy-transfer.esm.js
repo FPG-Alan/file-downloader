@@ -1,6 +1,6 @@
 /*!
  * savvy-transfer.js v1.0.0
- * (c) 2018-2020 FPG
+ * (c) 2018-2021 FPG
  * Released under the MIT License.
  */
 function createCommonjsModule(fn, module) {
