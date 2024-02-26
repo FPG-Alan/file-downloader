@@ -1,9 +1,9 @@
 {
-  "name": "savvy-transfer",
+  "name": "file-downloader",
   "version": "1.0.0",
   "description": "browsers-compatible file system",
-  "main": "dist/savvy-transfer.js",
-  "module": "dist/savvy-transfer.esm.js",
+  "main": "dist/file-downloader.js",
+  "module": "dist/file-downloader.esm.js",
   "types": "index.d.ts",
   "scripts": {
     "cz": "git-cz",
@@ -12,11 +12,7 @@
     "build": "npm run clean && cross-env NODE_ENV=production rollup -c scripts/rollup.config.prod.js",
     "release": "standard-version"
   },
-  "repository": {
-    "type": "git",
-    "url": "http://gogs.rto.im/savvy/savvy-transfer.git"
-  },
-  "author": "FPG",
+  "author": "alan",
   "license": "ISC",
   "husky": {
     "hooks": {

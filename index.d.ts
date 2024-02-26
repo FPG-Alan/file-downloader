@@ -1,5 +1,5 @@
-// Type definitions for Savvy-Transfer 0.0.1
-// Project: Savvy-Transfer
+// Type definitions for file-downloader 0.0.1
+// Project: file-downloader
 // Definitions by: Alan.Yang <http://fpg-alan.github.io>
 
 export declare class SavvyTransfer {
