@@ -4,6 +4,13 @@ import SavvyFile from '../file';
 import Transfer from '../transfer';
 
 /**
+ * Converts a string to a UTF-8 encoded Uint8Array.
+ */
+function toUtf8Bytes(str: string): Uint8Array {
+  return new TextEncoder().encode(str);
+}
+
+/**
  * get a ziped buffer of origin buffer from http request
  * @param {SavvyFile} currentFile file which being downloaded
  * @param {Transfer} transfer transfer which being ziped (might has multiply files)
@@ -19,21 +26,26 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
   let crc: number = Crc32(buffer, currentFile.crc || 0, buffer.byteLength);
   let ziper: ZIPClass = new ZIPClass(transfer.fileSize);
 
-  let fileName: string = unescape(encodeURIComponent(currentFile.name));
+  // let fileName: string = unescape(encodeURIComponent(currentFile.name));
+  let fileNameBytes: Uint8Array = toUtf8Bytes(currentFile.name);
   currentFile.bufferAcc += buffer.byteLength;
   currentFile.crc = crc;
 
   if (currentFile.offset === 0) {
     // begin set header
     currentFile.headerPos = transfer.offset;
-    let ebuf: any = ezBuffer(1 + 4 + 4 + fileName.length);
-    ebuf.i16(zipUtf8ExtraId);
-    ebuf.i16(5 + fileName.length); // size
-    ebuf.i8(1); // version
-    ebuf.i32(Crc32(fileName));
-    ebuf.appendBytes(fileName);
+    // let ebuf: any = ezBuffer(1 + 4 + 4 + fileName.length);
+    let ebuf: any = ezBuffer(1 + 4 + 4 + fileNameBytes.length);
 
-    let header: Uint8Array = ziper.ZipHeader(fileName, currentFile.fileSize /* TO-DO: add file date */, ebuf.getArray());
+    ebuf.i16(zipUtf8ExtraId);
+    // ebuf.i16(5 + fileName.length); // size
+    ebuf.i16(5 + fileNameBytes.length); // size
+    ebuf.i8(1); // version
+    // ebuf.i32(Crc32(fileName));
+    ebuf.i32(Crc32(fileNameBytes));
+    ebuf.appendBytes(fileNameBytes);
+
+    let header: Uint8Array = ziper.ZipHeader(fileNameBytes, currentFile.fileSize /* TO-DO: add file date */, ebuf.getArray());
 
     let d = new Uint8Array(header.byteLength + buffer.byteLength);
     d.set(header, 0);
@@ -45,7 +57,7 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
 
   // begin set central directory
   if (currentFile.bufferAcc === currentFile.fileSize) {
-    let centralDir = ziper.ZipCentralDirectory(fileName, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
+    let centralDir = ziper.ZipCentralDirectory(fileNameBytes, currentFile.fileSize, currentFile.fileSize, crc, false, currentFile.headerPos);
     // zipFile.dirData.push(centralDir.dirRecord);
     let centralDirBuffer: Uint8Array = centralDir.dataDescriptor;
 
@@ -60,14 +72,13 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
 
   if (isLast) {
     let dirRecord = transfer.files.map((file: SavvyFile) => {
-      let tmpCentralDir = ziper.ZipCentralDirectory(file.name, file.fileSize, file.fileSize, file.crc, false, file.headerPos);
+      let fileNameBytes = toUtf8Bytes(file.name);
+      let tmpCentralDir = ziper.ZipCentralDirectory(fileNameBytes, file.fileSize, file.fileSize, file.crc, false, file.headerPos);
 
       return tmpCentralDir.dirRecord;
     });
     let end = ziper.ZipSuffix(buffer.byteLength + transfer.offset, dirRecord);
-    let dirData: any[] = transfer.files.map(
-      (file: SavvyFile) => ziper.ZipCentralDirectory(unescape(encodeURIComponent(file.name)), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord
-    );
+    let dirData: any[] = transfer.files.map((file: SavvyFile) => ziper.ZipCentralDirectory(toUtf8Bytes(file.name), file.fileSize, file.fileSize, file.crc, false, file.headerPos).dirRecord);
 
     let tmpSize: number = 0,
       tmpOffset: number = buffer.byteLength,
@@ -101,6 +112,14 @@ export async function zipBuffer(currentFile: SavvyFile, transfer: Transfer, _buf
 
 const fileHeaderLen: number = 30;
 const noCompression: number = 0;
+/**
+ * 常见的 Flags 值
+ * 0x0000 (0): 无压缩、没有加密、没有数据描述符、文件名不使用 UTF-8 编码
+ * 0x0008: 使用 UTF-8 编码（对于文件名）
+ * 0x0001: 文件加密
+ * 0x0002: 使用数据描述符
+ * 0x808: UTF-8 编码 + 数据描述符（通常用于现代 ZIP 文件）
+ */
 const defaultFlags: number = 0x808; /* UTF-8 */
 const i32max: number = 0xffffffff;
 const i16max: number = 0xffff;
@@ -109,6 +128,8 @@ const zipUtf8ExtraId: number = 0x7075;
 const directory64LocLen: number = 20;
 const directory64EndLen: number = 56;
 const directoryEndLen: number = 22;
+// 小字节序, 低位字节存储在低地址，高位字节存储在高地址。
+// 16进制显示为 50 4B 03 04
 const fileHeaderSignature: number = 0x04034b50;
 const directory64LocSignature: number = 0x07064b50;
 const directory64EndSignature: number = 0x06064b50;
@@ -129,7 +150,7 @@ class ZIPClass {
     this.zipVersion = this.isZip64 ? 45 : 20;
   }
 
-  ZipHeader(fileName: string, fileSize: number, extra: number[]) {
+  ZipHeader(fileNameBytes: Uint8Array, fileSize: number, extra: number[]) {
     let readerVersion: number = this.zipVersion,
       Flags: number = defaultFlags,
       Method: number = noCompression,
@@ -137,18 +158,21 @@ class ZIPClass {
       crc32: number = 0,
       unsize: number = 0;
 
-    let buf = ezBuffer(fileHeaderLen + fileName.length + extra.length);
+    Flags |= 0x0800; // Enable UTF-8 flag
+
+    let buf = ezBuffer(fileHeaderLen + fileNameBytes.length + extra.length);
     buf.i32(fileHeaderSignature);
     buf.i16(readerVersion);
     buf.i16(Flags);
     buf.i16(Method);
     DosDateTime(date, buf);
+    // 开启了数据描述符， 所以这里应该被置空
     buf.i32(crc32); // crc32
     buf.i32(fileSize); // compress size
     buf.i32(unsize); // uncompress size
-    buf.i16(fileName.length);
+    buf.i16(fileNameBytes.length);
     buf.i16(extra.length);
-    buf.appendBytes(fileName);
+    buf.appendBytes(fileNameBytes);
     buf.appendBytes(extra);
 
     return buf.getBytes();
@@ -161,7 +185,7 @@ class ZIPClass {
    * @param {number} headerpos header position
    */
 
-  ZipCentralDirectory(filename: string, size: number, unsize: number, crc32: number, directory: boolean, headerpos: number) {
+  ZipCentralDirectory(fileNameBytes: Uint8Array, size: number, unsize: number, crc32: number, directory: boolean, headerpos: number) {
     let creatorVersion: number = this.zipVersion;
     let readerVersion: number = this.zipVersion;
     let Flags: number = defaultFlags;
@@ -182,7 +206,7 @@ class ZIPClass {
       extra = extra.concat(ebuf.getArray());
     }
 
-    var centralDirectoryBuf = ezBuffer(directoryHeaderLen + filename.length + extra.length);
+    var centralDirectoryBuf = ezBuffer(directoryHeaderLen + fileNameBytes.length + extra.length);
     centralDirectoryBuf.i32(directoryHeaderSignature);
     centralDirectoryBuf.i16(creatorVersion);
     centralDirectoryBuf.i16(readerVersion);
@@ -192,13 +216,13 @@ class ZIPClass {
     centralDirectoryBuf.i32(crc32);
     centralDirectoryBuf.i32(this.isZip64 ? i32max : size);
     centralDirectoryBuf.i32(this.isZip64 ? i32max : unsize);
-    centralDirectoryBuf.i16(filename.length);
+    centralDirectoryBuf.i16(fileNameBytes.length);
     centralDirectoryBuf.i16(extra.length);
     centralDirectoryBuf.i16(0); // no comments
     centralDirectoryBuf.i32(0); // disk number
     centralDirectoryBuf.i32(externalAttr);
     centralDirectoryBuf.i32(this.isZip64 ? i32max : headerpos);
-    centralDirectoryBuf.appendBytes(filename);
+    centralDirectoryBuf.appendBytes(fileNameBytes);
     centralDirectoryBuf.appendBytes(extra);
 
     var dataDescriptorBuf = ezBuffer(this.isZip64 ? dataDescriptor64Len : dataDescriptorLen);
@@ -269,13 +293,11 @@ function ezBuffer(size: number) {
     },
     getArray: function(): number[] {
       let bytes: number[] = [];
-      obj.map(
-        (val: number, i: number, array: Uint8Array): number => {
-          bytes.push(val);
+      obj.map((val: number, i: number, array: Uint8Array): number => {
+        bytes.push(val);
 
-          return val;
-        }
-      );
+        return val;
+      });
       return bytes;
     },
     getBytes: function() {

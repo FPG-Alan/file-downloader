@@ -27,7 +27,7 @@ Offset   Length   Contents
 ```
 
 Extended local header:
-
+(数据描述符)
 ```
 Offset   Length   Contents
   0      4 bytes  Extended Local file header signature (0x08074b50)
